@@ -1,7 +1,7 @@
 // routes/admin.js (ESM)
 import express from 'express';
 import { readRange } from '../services/googleSheets.js';
-import { createPdfReport, ensureRootFolder } from '../services/googleDrive.js';
+import { ensureRootFolder } from '../services/googleDrive.js';
 
 const router = express.Router();
 const SHEET_ID = process.env.SHEET_ID;
