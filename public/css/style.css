@@ -1,0 +1,130 @@
+:root{
+  --amdi-primary:#0f4c81;
+  --amdi-accent:#062a4f;
+  --amdi-soft:#f3f7fb;
+  --amdi-text:#072a40;
+  --accent-contrast:#ffd24c;
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  font-family:Inter,Arial,Helvetica,sans-serif;
+  background:linear-gradient(180deg,var(--amdi-soft),#ffffff);
+  color:var(--amdi-text);
+}
+
+.topbar{
+  height:64px;
+  display:flex;
+  align-items:center;
+  padding:12px 20px;
+  background:linear-gradient(90deg,var(--amdi-primary),var(--amdi-accent));
+  color:#fff;
+}
+
+.brand{display:flex;gap:12px;align-items:center}
+
+.logo{
+  width:44px;
+  height:44px;
+  border-radius:8px;
+  background:#fff;
+  color:var(--amdi-accent);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+}
+
+.wrapper{
+  display:flex;
+  gap:18px;
+  max-width:1200px;
+  margin:20px auto;
+  padding:0 16px;
+}
+
+.sidebar{
+  width:240px;
+  background:rgba(255,255,255,0.95);
+  border-radius:12px;
+  padding:12px;
+  box-shadow:0 6px 18px rgba(11,89,97,0.04);
+  height:calc(100vh - 120px);
+  overflow:auto;
+}
+
+.nav-item{
+  padding:10px;
+  border-radius:8px;
+  cursor:pointer;
+  margin-bottom:6px;
+}
+
+.nav-item.active{
+  background:linear-gradient(90deg,rgba(15,76,129,0.08),rgba(6,42,79,0.04));
+  font-weight:600;
+}
+
+.content{flex:1;padding:16px}
+
+.card{
+  background:#fff;
+  border-radius:10px;
+  padding:14px;
+  margin-bottom:12px;
+  box-shadow:0 6px 18px rgba(11,89,97,0.04);
+}
+
+.button{
+  background:var(--amdi-primary);
+  color:#fff;
+  padding:8px 12px;
+  border-radius:8px;
+  border:none;
+  cursor:pointer;
+}
+
+.input{
+  padding:10px;
+  border-radius:8px;
+  border:1px solid #ddd;
+  width:100%;
+  max-width:420px;
+}
+
+.kpi{display:flex;gap:12px;flex-wrap:wrap}
+
+.kpi .box{
+  background:#fff;
+  padding:10px;
+  border-radius:8px;
+  min-width:120px;
+  box-shadow:0 4px 12px rgba(0,0,0,0.04);
+}
+
+.footer{
+  text-align:center;
+  padding:16px;
+  color:#6b7380;
+}
+
+.login-center{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  height:72vh;
+}
+
+.protected-note{
+  font-size:13px;
+  color:#555;
+  margin-top:8px;
+}
+
+@media(max-width:900px){
+  .wrapper{flex-direction:column}
+  .sidebar{width:100%;height:auto}
+}
