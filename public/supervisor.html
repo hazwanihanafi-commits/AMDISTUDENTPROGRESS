@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Supervisor Approval</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="js/supervisor.js"></script>
+</head>
+
+<body>
+  <div class="navbar">Supervisor Approval Panel</div>
+
+  <div class="container">
+    <div class="card">
+      <h2>Approve a Student</h2>
+
+      <label>Supervisor Password</label>
+      <input id="svpass" class="input" type="password" placeholder="Enter supervisor password">
+
+      <label style="margin-top:12px;">Matric Number</label>
+      <input id="matric" class="input" placeholder="e.g., 23100749">
+
+      <label style="margin-top:12px;">Select Stage</label>
+      <select id="stage" class="input">
+        <option value="P1">P1 - Development Plan</option>
+        <option value="P3">P3 - Mid Candidature</option>
+        <option value="P4">P4 - Portfolio</option>
+        <option value="P5">P5 - Annual Progress</option>
+      </select>
+
+      <button class="button" onclick="approve()" style="margin-top:20px;">Approve</button>
+
+      <div id="status" style="margin-top:20px;color:var(--usm-purple);font-weight:600;"></div>
+    </div>
+  </div>
+</body>
+</html>
