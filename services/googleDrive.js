@@ -42,6 +42,17 @@ export async function ensureRootFolder(folderName = "AMDI Reports") {
 export async function driveUploadFromUrl(url, folderId) {
   const drive = await getDriveClient();
 
+  // --- DEBUG: Check if URL returns HTML instead of file ---
+  const debugResponse = await fetch(url);
+  const raw = await debugResponse.text();
+  console.log("FILE FETCH RESPONSE:", raw.slice(0, 200)); // <---- IMPORTANT
+
+  // If the URL returned HTML, stop here
+  if (raw.startsWith("<!DOCTYPE") || raw.startsWith("<html")) {
+    throw new Error("Invalid file URL — returned HTML instead of a file.");
+  }
+
+  // Upload file (use fresh fetch so the stream isn't consumed)
   const res = await drive.files.create({
     requestBody: {
       name: "uploaded-file",
@@ -53,12 +64,4 @@ export async function driveUploadFromUrl(url, folderId) {
   });
 
   return res.data;
-}
-
-// PDF report placeholder (customize later)
-export async function createPdfReport(data) {
-  return {
-    status: "PDF report creation placeholder",
-    data
-  };
 }
