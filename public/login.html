@@ -7,36 +7,36 @@
   <link rel="stylesheet" href="/css/style.css"/>
 </head>
 <body>
-  <div class="navbar">AMDI Portal — Sign in</div>
-
+  <div class="navbar">AMDI Login</div>
   <div class="container">
-    <div class="card login-center" style="max-width:520px;margin:40px auto;">
-      <div style="width:100%">
-        <h2>Sign in to AMDI Portal</h2>
-        <p>Use the portal access password to continue. For production use Google Sign-In (Option B).</p>
-
-        <label>Password</label>
-        <input id="pw" class="input" type="password" placeholder="Portal password">
-
-        <div style="margin-top:14px">
-          <button class="button" onclick="tryLogin()">Sign in</button>
-        </div>
-
-        <div id="err" style="color:#b00020;margin-top:12px;display:none"></div>
-        <div style="margin-top:8px;font-size:13px;color:#666">
-          Default demo password: <strong>AMDI2025</strong> — change in /public/js/shared.js
-        </div>
+    <div class="card">
+      <h3>Login</h3>
+      <p>Enter your institutional email to sign in (students, supervisors) or admin email.</p>
+      <input id="email" class="input" placeholder="you@student.usm.my"/>
+      <div style="margin-top:12px">
+        <button class="button" onclick="doLogin()">Sign in</button>
       </div>
+      <div id="msg" style="margin-top:12px;color:red;"></div>
     </div>
   </div>
 
-<script src="/js/shared.js"></script>
 <script>
-function tryLogin(){
-  const p = document.getElementById('pw').value.trim();
-  if(!p){ document.getElementById('err').style.display='block'; document.getElementById('err').textContent='Enter password'; return; }
-  if(doLogin(p)){ window.location.href = '/portal'; }
-  else { document.getElementById('err').style.display='block'; document.getElementById('err').textContent='Incorrect password'; }
+async function doLogin(){
+  const email = document.getElementById('email').value.trim();
+  if(!email) return document.getElementById('msg').innerText='Please enter email.';
+  const res = await fetch('/login', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email })
+  });
+  const j = await res.json();
+  if (j.status !== 'ok') {
+    document.getElementById('msg').innerText = j.message || 'Login failed';
+    return;
+  }
+  // redirect by role
+  if (j.role === 'student') window.location = '/student';
+  else if (j.role === 'supervisor') window.location = '/supervisor';
+  else if (j.role === 'admin') window.location = '/admin';
+  else window.location = '/';
 }
 </script>
 </body>
