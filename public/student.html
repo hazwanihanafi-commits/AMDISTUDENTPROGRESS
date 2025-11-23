@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Student Progress Checker</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script src="js/student.js"></script>
+</head>
+
+<body>
+  <div class="navbar">AMDI Student Progress Checker</div>
+
+  <div class="container">
+    <div class="card">
+      <h2>Check Your Progress</h2>
+      <label>Matric Number</label>
+      <input type="text" id="matric" class="input" placeholder="e.g., 23100749">
+
+      <button class="button" onclick="checkStatus()" style="margin-top:18px;">Check Status</button>
+
+      <div id="result" style="margin-top:20px;"></div>
+    </div>
+  </div>
+</body>
+</html>
