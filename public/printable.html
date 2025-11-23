@@ -1,0 +1,146 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>AMDI Printable Timeline</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:Arial;margin:20px;color:#222;}
+    .header{
+      background:#5b2b7b;
+      color:#fff;
+      padding:15px;
+      text-align:center;
+      border-radius:8px;
+      font-size:20px;
+      font-weight:700;
+    }
+    .box{
+      border:1px solid #ccc;
+      padding:12px;
+      border-radius:6px;
+      margin-top:14px;
+      background:#fafafa;
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      margin-top:12px;
+    }
+    th,td{
+      border:1px solid #ccc;
+      padding:10px;
+      text-align:left;
+      font-size:14px;
+    }
+    th{
+      background:#f5e9ff;
+      color:#5b2b7b;
+    }
+    .check{
+      font-size:20px;
+      color:#5b2b7b;
+      text-align:center;
+    }
+    .btn{
+      padding:8px 12px;
+      border:1px solid #5b2b7b;
+      background:#fff;
+      border-radius:6px;
+      cursor:pointer;
+      margin-top:10px;
+    }
+    @media print {
+      .no-print{ display:none; }
+      body{ margin:0; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">AMDI STUDENT PROGRESS TIMELINE</div>
+
+<div class="no-print" style="margin-top:16px;">
+  <label>
+    Matric:
+    <input id="mat" style="padding:6px;border-radius:6px;border:1px solid #aaa"/>
+  </label>
+  <button class="btn" onclick="loadTimeline()">Load</button>
+  <button class="btn" onclick="window.print()">Print</button>
+</div>
+
+<div id="content" style="margin-top:16px;"></div>
+
+<script>
+async function loadTimeline(){
+  const m = document.getElementById('mat').value.trim();
+  if(!m) return alert('Please enter matric number.');
+
+  const r = await fetch('/api/status?matric=' + encodeURIComponent(m));
+  const j = await r.json();
+
+  if(j.status !== 'ok'){
+    document.getElementById('content').innerHTML =
+      '<div class="box">Student not found.</div>';
+    return;
+  }
+
+  const tick = s => s ? '<div class="check">✓</div>' : '';
+
+  document.getElementById('content').innerHTML = `
+    <div class="box">
+      <strong>${j.studentName}</strong><br/>
+      Matric: ${j.matric}<br/>
+      Last update: ${j.lastUpdate || '-'}
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Activity</th>
+          <th>P1</th>
+          <th>P3</th>
+          <th>P4</th>
+          <th>P5</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Registration & Orientation</td>
+          <td>${tick(j.milestones.P1)}</td>
+          <td></td>
+          <td></td>
+          <td></td>
+        </tr>
+
+        <tr>
+          <td>Mid-Candidature Review</td>
+          <td></td>
+          <td>${tick(j.milestones.P3)}</td>
+          <td></td>
+          <td></td>
+        </tr>
+
+        <tr>
+          <td>Research Implementation II / Publication</td>
+          <td></td>
+          <td></td>
+          <td>${tick(j.milestones.P4)}</td>
+          <td></td>
+        </tr>
+
+        <tr>
+          <td>Thesis / Pre-Submission</td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td>${tick(j.milestones.P5)}</td>
+        </tr>
+      </tbody>
+    </table>
+  `;
+}
+</script>
+
+</body>
+</html>
