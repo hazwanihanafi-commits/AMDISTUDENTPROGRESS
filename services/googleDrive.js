@@ -14,7 +14,7 @@ async function getDriveClient() {
   return google.drive({ version: "v3", auth: client });
 }
 
-// Ensure a folder exists in Drive (create if not)
+// Ensure a folder exists (or create it)
 export async function ensureRootFolder(folderName = "AMDI Reports") {
   const drive = await getDriveClient();
 
@@ -27,7 +27,7 @@ export async function ensureRootFolder(folderName = "AMDI Reports") {
     return search.data.files[0].id;
   }
 
-  const newFolder = await drive.files.create({
+  const created = await drive.files.create({
     requestBody: {
       name: folderName,
       mimeType: "application/vnd.google-apps.folder"
@@ -35,24 +35,22 @@ export async function ensureRootFolder(folderName = "AMDI Reports") {
     fields: "id"
   });
 
-  return newFolder.data.id;
+  return created.data.id;
 }
 
 // Upload a file from URL into Drive
 export async function driveUploadFromUrl(url, folderId) {
   const drive = await getDriveClient();
 
-  // --- DEBUG: Check if URL returns HTML instead of file ---
+  // DEBUG: log what is downloaded from URL
   const debugResponse = await fetch(url);
   const raw = await debugResponse.text();
-  console.log("FILE FETCH RESPONSE:", raw.slice(0, 200)); // <---- IMPORTANT
+  console.log("FILE FETCH RESPONSE:", raw.slice(0, 200));
 
-  // If the URL returned HTML, stop here
   if (raw.startsWith("<!DOCTYPE") || raw.startsWith("<html")) {
-    throw new Error("Invalid file URL — returned HTML instead of a file.");
+    throw new Error("Invalid file URL — returned HTML instead of file content");
   }
 
-  // Upload file (use fresh fetch so the stream isn't consumed)
   const res = await drive.files.create({
     requestBody: {
       name: "uploaded-file",
