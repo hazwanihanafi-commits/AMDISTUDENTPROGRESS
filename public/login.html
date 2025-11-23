@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>AMDI Login</title>
+  <link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+  <div class="navbar">AMDI Portal — Sign in</div>
+
+  <div class="container">
+    <div class="card login-center" style="max-width:520px;margin:40px auto;">
+      <div style="width:100%">
+        <h2>Sign in to AMDI Portal</h2>
+        <p>Use the portal access password to continue. For production use Google Sign-In (Option B).</p>
+
+        <label>Password</label>
+        <input id="pw" class="input" type="password" placeholder="Portal password">
+
+        <div style="margin-top:14px">
+          <button class="button" onclick="tryLogin()">Sign in</button>
+        </div>
+
+        <div id="err" style="color:#b00020;margin-top:12px;display:none"></div>
+        <div style="margin-top:8px;font-size:13px;color:#666">
+          Default demo password: <strong>AMDI2025</strong> — change in /public/js/shared.js
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script src="/js/shared.js"></script>
+<script>
+function tryLogin(){
+  const p = document.getElementById('pw').value.trim();
+  if(!p){ document.getElementById('err').style.display='block'; document.getElementById('err').textContent='Enter password'; return; }
+  if(doLogin(p)){ window.location.href = '/portal'; }
+  else { document.getElementById('err').style.display='block'; document.getElementById('err').textContent='Incorrect password'; }
+}
+</script>
+</body>
+</html>
