@@ -28,35 +28,54 @@
 
 <script>
   const out = document.getElementById('out');
-  document.getElementById('check').addEventListener('click', async ()=>{
+
+  // CHECK STATUS
+  document.getElementById('check').addEventListener('click', async () => {
     const m = document.getElementById('matric').value.trim();
-    if(!m){ out.innerText='Enter matric'; return; }
-    out.innerText='Loading...';
-    try{
-      const r = await fetch('/status?matric='+encodeURIComponent(m));
+    if (!m) { out.innerText = 'Enter matric'; return; }
+
+    out.innerText = 'Loading...';
+
+    try {
+      // FIX: use /api/status
+      const r = await fetch('/api/status?matric=' + encodeURIComponent(m));
       const j = await r.json();
-      if(j.status==='not_found'){ out.innerText='Student not found'; return;}
-      if(j.status!=='ok'){ out.innerText=JSON.stringify(j); return; }
-      out.innerHTML = '<h3>'+j.name+' ('+j.matric+')</h3>' +
+
+      if (j.status === 'not_found') { out.innerText = 'Student not found'; return; }
+      if (j.status !== 'ok') { out.innerText = JSON.stringify(j); return; }
+
+      out.innerHTML =
+        '<h3>' + j.studentName + ' (' + j.matric + ')</h3>' +
         '<table><tr><th>Milestone</th><th>Submitted</th><th>Approved</th></tr>' +
-        '<tr><td>P1</td><td>'+ (j.milestones.P1||'') +'</td><td>'+ (j.milestones.P1Approved||'') +'</td></tr>' +
-        '<tr><td>P3</td><td>'+ (j.milestones.P3||'') +'</td><td>'+ (j.milestones.P3Approved||'') +'</td></tr>' +
-        '<tr><td>P4</td><td>'+ (j.milestones.P4||'') +'</td><td>'+ (j.milestones.P4Approved||'') +'</td></tr>' +
-        '<tr><td>P5</td><td>'+ (j.milestones.P5||'') +'</td><td>'+ (j.milestones.P5Approved||'') +'</td></tr>' +
-        '</table><p>Overall: '+ (j.overall||'') +'</p>';
-    }catch(e){ out.innerText='Error: '+e.message; }
+        '<tr><td>P1</td><td>' + (j.milestones.P1 || '') + '</td><td>' + (j.milestones.P1Approved || '') + '</td></tr>' +
+        '<tr><td>P3</td><td>' + (j.milestones.P3 || '') + '</td><td>' + (j.milestones.P3Approved || '') + '</td></tr>' +
+        '<tr><td>P4</td><td>' + (j.milestones.P4 || '') + '</td><td>' + (j.milestones.P4Approved || '') + '</td></tr>' +
+        '<tr><td>P5</td><td>' + (j.milestones.P5 || '') + '</td><td>' + (j.milestones.P5Approved || '') + '</td></tr>' +
+        '</table>';
+    }
+    catch (e) {
+      out.innerText = 'Error: ' + e.message;
+    }
   });
 
-  document.getElementById('approveP1').addEventListener('click', async ()=>{
+  // APPROVE P1
+  document.getElementById('approveP1').addEventListener('click', async () => {
     const m = document.getElementById('matric').value.trim();
-    if(!m){ out.innerText='Enter matric'; return; }
-    out.innerText='Approving...';
-    try{
-      const r = await fetch('/approve?matric='+encodeURIComponent(m)+'&stage=P1');
+    if (!m) { out.innerText = 'Enter matric'; return; }
+
+    out.innerText = 'Approving...';
+
+    try {
+      // FIX: use /api/approve
+      const r = await fetch('/api/approve?matric=' + encodeURIComponent(m) + '&stage=P1');
       const j = await r.json();
       out.innerText = JSON.stringify(j);
-    }catch(e){ out.innerText='Error: '+e.message; }
+    }
+    catch (e) {
+      out.innerText = 'Error: ' + e.message;
+    }
   });
 </script>
+
 </body>
 </html>
