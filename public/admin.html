@@ -1,0 +1,171 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>AMDI Admin Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family: Arial, sans-serif;margin:18px;color:#222}
+    header{background:#5b2b7b;color:#fff;padding:14px;border-radius:6px}
+    .grid{display:flex;gap:18px;margin-top:16px}
+    .col{flex:1;background:#fff;border-radius:8px;padding:14px;box-shadow:0 6px 18px rgba(0,0,0,0.05)}
+    input,select{padding:8px;border-radius:6px;border:1px solid #ccc}
+    button{padding:8px 12px;border-radius:6px;border:1px solid #888;background:#fff;cursor:pointer}
+    button.primary{background:#5b2b7b;color:#fff;border-color: #5b2b7b}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th,td{padding:8px;border-bottom:1px solid #eee;text-align:left;font-size:13px}
+    th{background:#f7f5f9;color:#5b2b7b}
+    .small{font-size:12px;color:#666}
+  </style>
+</head>
+<body>
+  <header><strong>AMDI Admin Dashboard</strong></header>
+
+  <div style="margin-top:14px">
+    <label>Supervisor password: <input id="svpass" type="password" /></label>
+    <label style="margin-left:8px">Matric: <input id="svmat" /></label>
+    <label style="margin-left:8px">Stage:
+      <select id="svstage"><option>P1</option><option>P3</option><option>P4</option><option>P5</option></select>
+    </label>
+    <button class="primary" onclick="approve()">Approve</button>
+    <button onclick="reloadStudents()">Reload students</button>
+    <button onclick="downloadApprovalLog()">Download approval log (CSV)</button>
+  </div>
+
+  <div class="grid">
+    <div class="col" style="flex:1.4">
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="search" placeholder="Search matric or name" style="flex:1" />
+        <button onclick="doSearch()">Search</button>
+      </div>
+
+      <table id="studentsTable">
+        <thead><tr><th>Matric</th><th>Name</th><th>P1</th><th>P3</th><th>P4</th><th>P5</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="col" style="flex:0.8">
+      <div><strong>Selected student</strong></div>
+      <div id="selInfo" style="margin-top:8px;color:#333">None</div>
+
+      <div style="margin-top:12px">
+        <button onclick="generatePdf()">Generate printable PDF</button>
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="small">Quick stats</div>
+        <pre id="quickStats" style="background:#fafafa;padding:8px;border-radius:6px"></pre>
+      </div>
+    </div>
+  </div>
+
+<script>
+async function fetchJson(url, opts){ 
+  const r = await fetch(url, opts); 
+  return await r.json(); 
+}
+
+async function reloadStudents(){
+  document.getElementById('studentsTable').querySelector('tbody').innerHTML =
+    '<tr><td colspan="7">Loading...</td></tr>';
+  try{
+    const j = await fetchJson('/api/students');
+    const tbody = document.getElementById('studentsTable').querySelector('tbody');
+    tbody.innerHTML = '';
+    j.forEach(row=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${row.Matric||''}</td>
+        <td>${row.StudentName||''}</td>
+        <td>${row['P1 Submitted']? '✓':''}</td>
+        <td>${row['P3 Submitted']? '✓':''}</td>
+        <td>${row['P4 Submitted']? '✓':''}</td>
+        <td>${row['P5 Submitted']? '✓':''}</td>
+        <td><button onclick="selectStudent('${row.Matric||''}')">Select</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }catch(err){
+    alert('Error loading students: ' + err.message);
+  }
+}
+
+function selectStudent(m){
+  document.getElementById('svmat').value = m;
+  loadSelected(m);
+}
+
+async function loadSelected(m){
+  const info = document.getElementById('selInfo');
+  info.textContent = 'loading...';
+  try{
+    const res = await fetch('/api/status?matric=' + encodeURIComponent(m));
+    const j = await res.json();
+    info.innerHTML = `
+      <div><strong>${j.studentName||'—'}</strong></div>
+      <div class="small">Matric: ${j.matric||'—'}</div>
+      <div class="small">Last update: ${j.lastUpdate||'—'}</div>
+    `;
+  }catch(e){
+    info.textContent = 'error';
+  }
+}
+
+async function approve(){
+  const pass = document.getElementById('svpass').value;
+  const matric = document.getElementById('svmat').value;
+  const stage = document.getElementById('svstage').value;
+
+  if(!matric){
+    alert('Enter matric');
+    return;
+  }
+
+  const body = { _svpass: pass, matric, stage };
+  const r = await fetch('/api/approve', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  });
+
+  const j = await r.json();
+  alert(JSON.stringify(j));
+  await reloadStudents();
+}
+
+async function generatePdf(){
+  const matric = document.getElementById('svmat').value;
+  if(!matric){ alert('Select matric'); return; }
+
+  const r = await fetch('/api/generate_pdf', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({matric})
+  });
+
+  const j = await r.json();
+  if(j.status==='ok'){
+    window.open(j.url, '_blank');
+  } else {
+    alert('PDF error: ' + JSON.stringify(j));
+  }
+}
+
+function downloadApprovalLog(){
+  window.location = '/api/approval_log';
+}
+
+function doSearch(){
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  const rows = document.querySelectorAll('#studentsTable tbody tr');
+  rows.forEach(r=>{
+    const text = r.textContent.toLowerCase();
+    r.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+
+reloadStudents();
+</script>
+</body>
+</html>
