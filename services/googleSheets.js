@@ -23,10 +23,26 @@ export async function readRange(spreadsheetId, range) {
   return res.data.values || [];
 }
 
-// Write data to a sheet
-export async function writeRange(spreadsheetId, range, values) {
+// Write or append data to Google Sheet
+export async function writeRange(spreadsheetId, range, values, options = {}) {
   const sheets = await getSheetsClient();
 
+  // Handle append row
+  if (options.appendRow) {
+    const res = await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range,
+      valueInputOption: "RAW",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: {
+        values: options.values
+      }
+    });
+
+    return res.data;
+  }
+
+  // Normal update
   const res = await sheets.spreadsheets.values.update({
     spreadsheetId,
     range,
