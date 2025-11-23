@@ -21,10 +21,22 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // API routes
 app.use('/api', apiRoutes);
-app.use('/api', adminRoutes);
+app.use('/api/admin', adminRoutes);
 
 // health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+app.get('/printable', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'printable.html'));
+});
+
+app.get('/student', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'student-circle.html'));
+});
 
 // fallback to portal
 app.get('*', (req, res) => {
