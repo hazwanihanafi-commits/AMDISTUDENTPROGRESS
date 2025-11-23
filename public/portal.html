@@ -22,18 +22,20 @@
   <pre id="dash"></pre>
 
   <script>
-    async function check(){
-      const m = document.getElementById('matric').value.trim();
-      if(!m){ alert('Enter matric'); return; }
-      const r = await fetch('/status?matric=' + encodeURIComponent(m));
-      const j = await r.json();
-      document.getElementById('out').textContent = JSON.stringify(j, null, 2);
-    }
-    async function loadDashboard(){
-      const r = await fetch('/dashboard');
-      const j = await r.json();
-      document.getElementById('dash').textContent = JSON.stringify(j, null, 2);
-    }
-  </script>
+  async function check(){
+    const m = document.getElementById('matric').value.trim();
+    if(!m){ alert('Enter matric'); return; }
+    const r = await fetch('/api/status?matric=' + encodeURIComponent(m));
+    const j = await r.json();
+    document.getElementById('out').textContent = JSON.stringify(j, null, 2);
+  }
+
+  async function loadDashboard(){
+    const r = await fetch('/api/dashboardData');
+    const j = await r.json();
+    document.getElementById('dash').textContent = JSON.stringify(j, null, 2);
+  }
+</script>
+
 </body>
 </html>
