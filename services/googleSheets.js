@@ -11,23 +11,20 @@ async function getSheetsClient() {
   return google.sheets({ version: "v4", auth: client });
 }
 
-// Read data from a sheet
+// Read data
 export async function readRange(spreadsheetId, range) {
   const sheets = await getSheetsClient();
-
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range,
   });
-
   return res.data.values || [];
 }
 
-// Write or append data to Google Sheet
+// Write or append data
 export async function writeRange(spreadsheetId, range, values, options = {}) {
   const sheets = await getSheetsClient();
 
-  // Handle append row
   if (options.appendRow) {
     const res = await sheets.spreadsheets.values.append({
       spreadsheetId,
@@ -38,11 +35,9 @@ export async function writeRange(spreadsheetId, range, values, options = {}) {
         values: options.values
       }
     });
-
     return res.data;
   }
 
-  // Normal update
   const res = await sheets.spreadsheets.values.update({
     spreadsheetId,
     range,
@@ -51,9 +46,4 @@ export async function writeRange(spreadsheetId, range, values, options = {}) {
   });
 
   return res.data;
-}
-
-// Optional: if you still need this
-export async function getSheetValues(spreadsheetId, range) {
-  return readRange(spreadsheetId, range);
 }
