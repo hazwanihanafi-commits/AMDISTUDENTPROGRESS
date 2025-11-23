@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>AMDI — Admin Dashboard</title>
+  <link rel="stylesheet" href="/css/style.css"/>
+  <style>
+    :root{--primary:#4A0E4E;--gold:#C5A253}
+    .metric{display:inline-block;background:#fff;padding:18px;border-radius:12px;margin-right:12px;box-shadow:0 6px 18px rgba(0,0,0,0.04)}
+    .metric h2{margin:0}
+  </style>
+</head>
+<body>
+  <div class="navbar" style="background:linear-gradient(90deg,#4A0E4E,#6A2E6A);">AMDI Admin</div>
+
+  <div class="container">
+    <div class="card">
+      <h3>System Overview</h3>
+      <div id="metrics" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card">
+      <h3>Actions</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="button" onclick="downloadCSV()">Download approval_log.csv</button>
+        <a class="button" href="/mnt/data/WRITTEN REPORT AND PRESENTATION RUBRIC RESEARCH MODE (MSc).pdf" target="_blank" style="background:var(--gold);color:#000">Open MSc Rubric</a>
+        <button class="button" onclick="doHealth()">Health check</button>
+      </div>
+      <pre id="adminOut" style="margin-top:12px;background:#f7f7f7;padding:10px;border-radius:8px;min-height:80px"></pre>
+    </div>
+
+    <div class="card">
+      <h3>Search Student</h3>
+      <input id="qmat" class="input" placeholder="Enter matric number">
+      <button class="button" style="margin-top:8px" onclick="search()">Search</button>
+      <div id="searchResult" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card">
+      <button class="button" onclick="location.href='/auth/logout'">Sign out</button>
+    </div>
+  </div>
+
+<script>
+async function loadOverview(){
+  const r = await fetch('/api/dashboardData');
+  const j = await r.json();
+  if (j.status !== 'ok') { document.getElementById('metrics').innerText = 'Error'; return; }
+  const t = j.totals || { total:0, P1:0, P3:0, P4:0, P5:0, completed:0 };
+  const el = document.getElementById('metrics');
+  el.innerHTML = `
+    <div class="metric"><h2>${t.total}</h2><div>Total Students</div></div>
+    <div class="metric"><h2>${t.P1}</h2><div>P1 Submitted</div></div>
+    <div class="metric"><h2>${t.P3}</h2><div>P3 Submitted</div></div>
+    <div class="metric"><h2>${t.P4}</h2><div>P4 Submitted</div></div>
+    <div class="metric"><h2>${t.P5}</h2><div>P5 Submitted</div></div>
+    <div class="metric"><h2>${t.completed}</h2><div>Completed</div></div>
+  `;
+}
+
+function downloadCSV(){
+  window.open('/api/approval_log','_blank');
+}
+
+async function doHealth(){
+  const r = await fetch('/api/health');
+  const j = await r.json();
+  document.getElementById('adminOut').innerText = JSON.stringify(j, null, 2);
+}
+
+async function search(){
+  const m = document.getElementById('qmat').value.trim();
+  if(!m) return;
+  const r = await fetch('/api/status?matric=' + encodeURIComponent(m));
+  const j = await r.json();
+  const out = document.getElementById('searchResult');
+  if (j.status !== 'ok'){ out.innerText = j.message || 'Not found'; return; }
+  const row = j.row || j.raw || {};
+  out.innerHTML = `<div style="font-weight:700">${row['Student Name']||row['StudentName']||''} (${row['Matric No']||row['Matric']||''})</div>
+    <div><b>P1 Submitted:</b> ${row['P1 Submitted']||row['P1']||'--'}</div>
+    <div><b>P1 Approved:</b> ${row['P1 Approved']||'--'}</div>
+    <div style="margin-top:8px"><a class="button" href="/printable.html?matric=${encodeURIComponent(m)}" target="_blank">Open Printable Summary</a></div>`;
+}
+
+window.onload = () => { loadOverview(); };
+</script>
+</body>
+</html>
