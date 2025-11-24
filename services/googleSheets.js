@@ -18,66 +18,110 @@ export async function readRange(spreadsheetId, range) {
   return res.data.values || [];
 }
 
-// Treat any non-empty cell as a flag (System B)
-function flagCell(val) {
-  return val !== undefined && val !== null && String(val).trim() !== "";
+// case-insensitive header search
+function findHeaderIndex(headers, candidates = []) {
+  const normalized = headers.map(h => (h || "").toString().trim().toLowerCase());
+  for (const c of candidates) {
+    const idx = normalized.indexOf(String(c).trim().toLowerCase());
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+
+// tolerant date parse for dd/mm/yyyy or JS parsable dates
+function parseStartDate(raw) {
+  if (!raw) return new Date();
+  // if already Date-like string
+  const s = String(raw).trim();
+  if (s.includes("/")) {
+    const parts = s.split("/");
+    if (parts.length === 3) {
+      // assume dd/mm/yyyy
+      let [d, m, y] = parts;
+      d = parseInt(d,10); m = parseInt(m,10)-1; y = parseInt(y,10);
+      if (y < 100) y += 2000;
+      const dt = new Date(y, m, d);
+      if (!isNaN(dt.getTime())) return dt;
+    }
+  }
+  const dt = new Date(s);
+  return isNaN(dt.getTime()) ? new Date() : dt;
 }
 
 export async function readMasterTracking(spreadsheetId) {
   const rows = await readRange(spreadsheetId, "MasterTracking!A1:Z2000");
-  if (!rows || !rows.length) return [];
+  if (!rows || rows.length < 1) return [];
 
-  const headers = rows[0].map(h => (h || "").trim());
+  const headers = rows[0].map(h => (h || "").toString().trim());
   const dataRows = rows.slice(1);
 
-  const students = dataRows.map(row => {
-    const rowObj = {};
-    headers.forEach((h, i) => rowObj[h] = row[i] || "");
+  // find indexes (robust)
+  const idx = (candidates) => findHeaderIndex(headers, candidates);
 
-    // normalize matric
-    const matric = (rowObj["Matric"] || rowObj["Matric No"] || rowObj["MatricNo"] || "").toString().trim();
+  const idxMatric = idx(['Matric','Matric No','MatricNo','Matric Number','matric']);
+  const idxName = idx(['Student Name','Name','student name']);
+  const idxProgramme = idx(['Programme','Program','programme']);
+  const idxStart = idx(['Start Date','StartDate','Start','Registration Date','Timestamp']);
 
-    // Determine programme
-    const programme = (rowObj["Programme"] || "").toString().trim();
+  const idxP1Sub = idx(['P1 Submitted','P1Submitted','P1 Sub']);
+  const idxP1App = idx(['P1 Approved','P1Approved','P1 App']);
+  const idxP3Sub = idx(['P3 Submitted','P3Submitted']);
+  const idxP3App = idx(['P3 Approved','P3Approved']);
+  const idxP4Sub = idx(['P4 Submitted','P4Submitted']);
+  const idxP4App = idx(['P4 Approved','P4Approved']);
+  const idxP5Sub = idx(['P5 Submitted','P5Submitted']);
+  const idxP5App = idx(['P5 Approved','P5Approved']);
 
-    // Start date (keep as string but try parsing if possible)
-    const startRaw = rowObj["Start Date"] || rowObj["StartDate"] || "";
-    const startDate = startRaw ? new Date(startRaw) : new Date();
+  const idxSupervisor = idx(["Main Supervisor's Email","Supervisor Email","Supervisor","Main Supervisor"]);
+  const idxStudentEmail = idx(["Student's Email","Student Email","Email","student email"]);
+  const idxActivities = idx(['Activity','Activities','Milestone','Activity List']);
 
-    // Read P flags as raw strings (System B)
+  const students = dataRows.map((row) => {
+    const col = i => (i >= 0 ? (row[i] || "").toString().trim() : "");
+
+    const matric = col(idxMatric);
+    const name = col(idxName);
+    const programme = col(idxProgramme);
+    const startDate = parseStartDate(col(idxStart));
+
+    const rawP1Sub = col(idxP1Sub);
+    const rawP1App = col(idxP1App);
+    const rawP3Sub = col(idxP3Sub);
+    const rawP3App = col(idxP3App);
+    const rawP4Sub = col(idxP4Sub);
+    const rawP4App = col(idxP4App);
+    const rawP5Sub = col(idxP5Sub);
+    const rawP5App = col(idxP5App);
+
+    const activitiesRaw = col(idxActivities);
+
     const mapped = {
       matric,
-      name: rowObj["Student Name"] || rowObj["Name"] || "",
+      name,
       programme,
       startDate,
 
-      // keep flags as original string or boolean; buildTimeline will use truthiness
-      p1Submitted: rowObj["P1 Submitted"] || "",
-      p1Approved: rowObj["P1 Approved"] || "",
-      p3Submitted: rowObj["P3 Submitted"] || "",
-      p3Approved: rowObj["P3 Approved"] || "",
-      p4Submitted: rowObj["P4 Submitted"] || "",
-      p4Approved: rowObj["P4 Approved"] || "",
-      p5Submitted: rowObj["P5 Submitted"] || "",
-      p5Approved: rowObj["P5 Approved"] || "",
+      // keep raw flags — buildTimeline will use truthiness (System B)
+      p1Submitted: rawP1Sub || "",
+      p1Approved: rawP1App || "",
+      p3Submitted: rawP3Sub || "",
+      p3Approved: rawP3App || "",
+      p4Submitted: rawP4Sub || "",
+      p4Approved: rawP4App || "",
+      p5Submitted: rawP5Sub || "",
+      p5Approved: rawP5App || "",
 
-      supervisorEmail: rowObj["Main Supervisor's Email"] || "",
-      studentEmail: rowObj["Student's Email"] || "",
-      // optionally a column that lists activities (comma separated)
-      activitiesRaw: rowObj["Activity"] || rowObj["Milestone"] || ""
+      supervisorEmail: col(idxSupervisor),
+      studentEmail: col(idxStudentEmail),
+      activitiesRaw
     };
 
-    // Decide MSc vs PhD: check keyword 'Philosophy' or 'Doctor'
-    const isPhD = /(philosophy|doctor|phd)/i.test(mapped.programme);
+    const isPhD = /(philosophy|phd|doctor)/i.test(mapped.programme || "");
+    const expectedMonths = isPhD ? {P1:0,P3:3,P4:6,P5:24} : {P1:0,P3:3,P4:6,P5:12};
 
-    const expectedMonths = isPhD
-      ? { P1: 0, P3: 3, P4: 6, P5: 24 }
-      : { P1: 0, P3: 3, P4: 6, P5: 12 };
-
-    // Build timeline (System B expects flags not dates)
     mapped.timeline = buildTimeline(mapped, expectedMonths);
 
-    // Compute progress expects boolean flags — convert truthy -> true
+    // convert flags -> booleans for progress calculation
     mapped.p1Submitted = !!mapped.p1Submitted;
     mapped.p1Approved  = !!mapped.p1Approved;
     mapped.p3Submitted = !!mapped.p3Submitted;
@@ -89,7 +133,7 @@ export async function readMasterTracking(spreadsheetId) {
 
     mapped.progress = calcProgress(mapped);
 
-    // Process activities: if sheet contains comma-separated activities, split and group
+    // split activities if comma-separated and group
     let activities = [];
     if (mapped.activitiesRaw && String(mapped.activitiesRaw).trim()) {
       activities = String(mapped.activitiesRaw).split(",").map(s => s.trim()).filter(Boolean);
