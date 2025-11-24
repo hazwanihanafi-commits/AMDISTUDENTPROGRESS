@@ -7,22 +7,29 @@ const router = express.Router();
 
 router.get("/:matric", async (req, res, next) => {
   try {
+    // Load all students
     const students = await readMasterTracking(process.env.SHEET_ID);
-    const student = students.find((s) => s.matric === req.params.matric);
+
+    // Find student by matric number
+    const student = students.find(
+      (s) => String(s.matric).trim() === String(req.params.matric).trim()
+    );
 
     if (!student) {
       return res.status(404).send("Student not found");
     }
 
-    // compute timeline from submitted dates
-    const extraTimeline = computeTimeline(student);
+    // Compute additional timeline (actual submission dates)
+    const timelineExtra = computeTimeline(student);
 
+    // Pass timelineExtra + student.timeline (expected timeline)
     res.render("student", {
       student,
-      timeline: extraTimeline,
+      timeline: timelineExtra,
       imagePath: "/assets/timeline.png",
     });
   } catch (err) {
+    console.error("Error in /student route:", err);
     next(err);
   }
 });
