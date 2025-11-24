@@ -1,72 +1,84 @@
 // helpers/buildTimeline.js
 
-export function buildTimeline(student, expectedMonths) {
-  const start = new Date(student.startDate);
+/**
+ * Build milestone-based timeline (System B).
+ * - student: { startDate: Date or string, p1Submitted: bool/string, p1Approved: bool/string, ... }
+ * - expectedMonths: { P1:0, P3:3, P4:6, P5:12|24 }
+ *
+ * Returns { quarters: [...], milestones: [{id, expectedQuarter, submitted, approved}], status }
+ */
 
-  if (isNaN(start)) {
-    return {
-      quarters: [],
-      milestones: [],
-      status: "Invalid Start Date"
-    };
+export function buildTimeline(student, expectedMonths) {
+  // parse start date
+  let start = student.startDate instanceof Date ? student.startDate : new Date(student.startDate);
+  if (isNaN(start.getTime())) {
+    // fallback to today so we still generate quarters (but flag Invalid Start Date if you want)
+    start = new Date();
   }
 
-  // ========== Generate Quarters ==========
-  const totalMonths = expectedMonths.P5;     // 24 for PhD, 12 for MSc
-  const totalQuarters = Math.ceil(totalMonths / 3);
+  // Determine total months and quarters
+  const totalMonths = expectedMonths.P5;
+  // For display we want:
+  // - MSc: 12 months -> 4 quarters (but we can show 8 quarters = 2 years if you prefer). We'll show 8 quarters for MSc and 12 for PhD to give a wider range.
+  const correctedTotalQuarters = totalMonths === 12 ? 8 : 12; // MSc -> 8 quarters, PhD -> 12 quarters
 
   const quarters = [];
-  for (let i = 0; i < totalQuarters; i++) {
+  const cursor = new Date(start);
+  for (let i = 0; i < correctedTotalQuarters; i++) {
     const year = Math.floor(i / 4) + 1;
     const q = (i % 4) + 1;
     quarters.push(`Y${year}Q${q}`);
+    cursor.setMonth(cursor.getMonth() + 3);
   }
 
-  // Convert month → quarter key
-  function monthToQuarter(m) {
-    const index = Math.floor(m / 3);
-    return quarters[index] || quarters[quarters.length - 1];
+  // convert month offset -> quarter label index
+  function monthToQuarterLabel(monthOffset) {
+    const idx = Math.floor(monthOffset / 3);
+    return quarters[idx] || quarters[quarters.length - 1];
   }
 
-  // ========== Build Milestone Objects ==========
+  // helper: treat any non-empty string or truthy value as true (milestone flags)
+  function flag(val) {
+    return val !== "" && val !== null && val !== undefined && val !== false;
+  }
+
   const milestones = [
     {
       id: "P1",
-      expectedQuarter: monthToQuarter(expectedMonths.P1),
-      submitted: student.p1Submitted,
-      approved: student.p1Approved
+      expectedQuarter: monthToQuarterLabel(expectedMonths.P1),
+      submitted: flag(student.p1Submitted),
+      approved: flag(student.p1Approved)
     },
     {
       id: "P3",
-      expectedQuarter: monthToQuarter(expectedMonths.P3),
-      submitted: student.p3Submitted,
-      approved: student.p3Approved
+      expectedQuarter: monthToQuarterLabel(expectedMonths.P3),
+      submitted: flag(student.p3Submitted),
+      approved: flag(student.p3Approved)
     },
     {
       id: "P4",
-      expectedQuarter: monthToQuarter(expectedMonths.P4),
-      submitted: student.p4Submitted,
-      approved: student.p4Approved
+      expectedQuarter: monthToQuarterLabel(expectedMonths.P4),
+      submitted: flag(student.p4Submitted),
+      approved: flag(student.p4Approved)
     },
     {
       id: "P5",
-      expectedQuarter: monthToQuarter(expectedMonths.P5),
-      submitted: student.p5Submitted,
-      approved: student.p5Approved
+      expectedQuarter: monthToQuarterLabel(expectedMonths.P5),
+      submitted: flag(student.p5Submitted),
+      approved: flag(student.p5Approved)
     }
   ];
 
-  // ========== Determine Student Status ==========
-  const today = new Date();
-  const monthsDiff =
-    (today.getFullYear() - start.getFullYear()) * 12 +
-    (today.getMonth() - start.getMonth());
+  // Compute status: Completed if P5 approved, Warning/Overduration based on months elapsed vs expected P5 offset
+  const now = new Date();
+  const monthsDiff = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
 
   let status = "On Track";
-
-  if (student.p5Approved) status = "Completed";
+  if (milestones[3].approved) status = "Completed";
   else if (monthsDiff > expectedMonths.P5) status = "Overduration";
   else if (monthsDiff > expectedMonths.P5 - 3) status = "Warning";
 
   return { quarters, milestones, status };
 }
+
+export default buildTimeline;
