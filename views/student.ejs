@@ -4,38 +4,27 @@
   <meta charset="utf-8" />
   <title><%= student.name %> — Progress</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <!-- ECharts -->
   <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
-
   <link rel="stylesheet" href="/css/student.css">
 </head>
 <body>
   <div class="container">
-
-    <!-- top -->
     <div class="topbar">
-      <div class="logo">
-        <img src="/assets/logo.png" alt="logo" style="width:100%;height:100%;object-fit:cover"/>
-      </div>
+      <div class="logo"><img src="/assets/logo.png" style="width:100%;height:100%;object-fit:cover"/></div>
       <div>
         <div class="title">AMDI Student Progress</div>
-        <div class="sub">Student detail — <%= student.matric %> · <%= student.programme %></div>
+        <div class="sub">Student — <%= student.matric %> · <%= student.programme %></div>
       </div>
-      <div style="margin-left:auto; text-align:right;">
-        <a href="/" class="btn" style="background:transparent;color:var(--navy);border:2px solid var(--navy);">← Back to Dashboard</a>
-      </div>
+      <div style="margin-left:auto;"><a href="/" class="btn">← Dashboard</a></div>
     </div>
 
     <div class="grid">
-
-      <!-- left column -->
       <div>
         <div class="card student-card">
           <div class="avatar"><%= student.name.split(' ').map(n=>n[0]).slice(0,2).join('') %></div>
-          <div class="student-meta" style="flex:1">
+          <div class="student-meta">
             <h2><%= student.name %></h2>
-            <p><strong>Matric:</strong> <%= student.matric %> &nbsp; | &nbsp; <strong>Program:</strong> <%= student.programme %></p>
+            <p><strong>Matric:</strong> <%= student.matric %> | <strong>Program:</strong> <%= student.programme %></p>
             <div class="meta-list">
               <span class="badge"><strong>Status:</strong> <%= student.timeline.status %></span>
               <span class="muted">Supervisor: <%= student.supervisorEmail || '—' %></span>
@@ -43,139 +32,136 @@
           </div>
         </div>
 
-        <!-- Donut -->
         <div id="donut" style="margin-top:14px;">
-          <div id="donutChart" style="width:100%;height:100%;"></div>
+          <div id="donutChart" style="width:100%;height:220px;"></div>
         </div>
 
-        <div style="margin-top:10px; text-align:center; font-weight:700; color:var(--navy)">
-          Overall progress: <span style="font-size:20px;"><%= student.progress.percentage %>%</span>
+        <div style="text-align:center; margin-top:8px;">
+          Overall progress: <strong><%= student.progress.percentage %>%</strong>
         </div>
       </div>
 
-      <!-- right column -->
       <div class="right-pane">
-
-        <!-- milestone table -->
         <div class="card">
-          <h3 style="margin:0 0 8px 0; color:var(--navy)">Milestones (P1 → P5)</h3>
+          <h3>Milestones</h3>
           <table>
             <thead>
-              <tr>
-                <th>Milestone</th>
-                <th>Expected (Quarter)</th>
-                <th>Submitted</th>
-                <th>Approved</th>
-                <th>Status</th>
-              </tr>
+              <tr><th>Milestone</th><th>Expected (Quarter)</th><th>Submitted</th><th>Approved</th><th>Status</th></tr>
             </thead>
             <tbody>
-              <% student.timeline.milestones.forEach(m => { %>
-              <tr>
-                <td><strong><%= m.id %></strong></td>
-                <td><%= m.expectedQuarter %></td>
-                <td><%= m.submitted ? "✓" : "" %></td>
-                <td><%= m.approved ? "✓" : "" %></td>
-                <td>
-                  <% if (m.approved) { %>
-                    <span class="status-pill status-on">Approved</span>
-                  <% } else if (m.submitted) { %>
-                    <span class="status-pill status-sub">Submitted</span>
-                  <% } else { %>
-                    <span class="status-pill status-pend">Pending</span>
-                  <% } %>
-                </td>
-              </tr>
+              <% student.timeline.milestones.forEach(function(m) { %>
+                <tr>
+                  <td><strong><%= m.id %></strong></td>
+                  <td><%= m.expectedQuarter %></td>
+                  <td><%= m.submitted ? '✓' : '' %></td>
+                  <td><%= m.approved ? '✓' : '' %></td>
+                  <td>
+                    <% if (m.approved) { %>
+                      <span class="status-pill status-on">Approved</span>
+                    <% } else if (m.submitted) { %>
+                      <span class="status-pill status-sub">Submitted</span>
+                    <% } else { %>
+                      <span class="status-pill status-pend">Pending</span>
+                    <% } %>
+                  </td>
+                </tr>
               <% }) %>
             </tbody>
           </table>
         </div>
 
-        <!-- timeline chart -->
         <div class="timeline-box">
-          <h4 style="margin:0 0 8px 0; color:var(--navy)">Expected vs Actual Timeline</h4>
-          <div id="timelineChart"></div>
-
-          <div class="legend" style="margin-top:10px;">
-            <div class="item"><span class="swatch" style="background:#bdc3c7"></span> Expected</div>
-            <div class="item"><span class="swatch" style="background:var(--warning)"></span> Submitted</div>
-            <div class="item"><span class="swatch" style="background:var(--success)"></span> Approved</div>
+          <h4>Timeline</h4>
+          <div id="timelineChart" style="height:220px;"></div>
+          <div style="margin-top:10px;">
+            <strong>Activities grouped by milestone</strong>
+            <div style="margin-top:8px;">
+              <% ['P1','P3','P4','P5'].forEach(function(pid){ %>
+                <div style="margin-bottom:8px;">
+                  <strong><%= pid %> — <%= student.timeline.milestones.find(x=>x.id===pid).expectedQuarter %></strong>
+                  <ul>
+                    <% (student.activitiesGrouped && student.activitiesGrouped[pid] || []).forEach(function(act){ %>
+                      <li><%= act %></li>
+                    <% }) %>
+                    <% if (!(student.activitiesGrouped && student.activitiesGrouped[pid] && student.activitiesGrouped[pid].length)) { %>
+                      <li style="color:#888">No activities listed</li>
+                    <% } %>
+                  </ul>
+                </div>
+              <% }) %>
+            </div>
           </div>
         </div>
 
       </div>
     </div>
-
   </div>
 
-  <!-- CHART SCRIPTS -->
   <script>
     const student = <%- JSON.stringify(student) %>;
-    const timeline = student.timeline;
+    const timeline = student.timeline || { quarters: [], milestones: [] };
 
-    // DONUT CHART
-    (function () {
-      const chart = echarts.init(document.getElementById("donutChart"));
-      const pct = student.progress.percentage;
-
+    // Donut
+    (function(){
+      const dom = document.getElementById('donutChart');
+      const chart = echarts.init(dom);
+      const pct = student.progress.percentage || 0;
       chart.setOption({
-        title: {
-          text: pct + "%",
-          left: "center",
-          top: "42%",
-          textStyle: { fontSize: 24, color: "#0d47a1", fontWeight: 800 }
-        },
-        series: [{
-          type: "pie",
-          radius: ["60%", "85%"],
-          label: { show: false },
-          data: [
-            { value: pct, itemStyle: { color: "rgba(13,71,161,0.95)" }},
-            { value: 100 - pct, itemStyle: { color: "rgba(13,71,161,0.12)" }}
-          ]
-        }]
+        title:{ text: pct + '%', left:'center', top:'40%', textStyle:{fontSize:22,color:'#0d47a1'}},
+        series:[{ type:'pie', radius:['60%','85%'], label:{show:false}, data:[
+          { value: pct, itemStyle:{ color: '#0d47a1' } },
+          { value: 100-pct, itemStyle:{ color: '#eef3fb' } }
+        ]}]
       });
+      window.addEventListener('resize', ()=> chart.resize());
     })();
 
-    // TIMELINE BAR CHART
-    (function () {
-      const chart = echarts.init(document.getElementById("timelineChart"));
+    // Timeline bars
+    (function(){
+      const dom = document.getElementById('timelineChart');
+      const chart = echarts.init(dom);
+      const quarters = timeline.quarters || [];
+      const milestones = timeline.milestones || [];
 
-      const quarters = timeline.quarters;
-      const milestones = timeline.milestones;
       const series = [];
-
       milestones.forEach((m, idx) => {
+        // expected
         series.push({
-          name: m.id + " expected",
-          type: "bar",
+          name: m.id + ' expected',
+          type: 'bar',
           stack: m.id,
-          itemStyle: { color: "#bdc3c7" },
-          data: quarters.map(q => q === m.expectedQuarter ? 1 : 0)
+          itemStyle:{ color: '#bdc3c7' },
+          data: quarters.map(q => q === m.expectedQuarter ? 1 : 0),
+          barWidth: 16
         });
+        // submitted
         series.push({
-          name: m.id + " submitted",
-          type: "bar",
+          name: m.id + ' submitted',
+          type: 'bar',
           stack: m.id,
-          itemStyle: { color: "#f1c40f" },
-          data: quarters.map(q => m.submitted && q === m.expectedQuarter ? 1 : 0)
+          itemStyle:{ color: '#f1c40f' },
+          data: quarters.map(q => (m.submitted && q === m.expectedQuarter) ? 1 : 0),
+          barWidth: 16
         });
+        // approved
         series.push({
-          name: m.id + " approved",
-          type: "bar",
+          name: m.id + ' approved',
+          type: 'bar',
           stack: m.id,
-          itemStyle: { color: "#2ecc71" },
-          data: quarters.map(q => m.approved && q === m.expectedQuarter ? 1 : 0)
+          itemStyle:{ color: '#2ecc71' },
+          data: quarters.map(q => (m.approved && q === m.expectedQuarter) ? 1 : 0),
+          barWidth: 16
         });
       });
 
       chart.setOption({
-        tooltip: {},
-        grid: { left: "6%", right: "6%", bottom: "3%", containLabel: true },
-        xAxis: { type: "category", data: quarters },
-        yAxis: { show: false },
+        tooltip:{},
+        grid:{ left:'3%', right:'4%', bottom:'3%', containLabel:true },
+        xAxis:{ type:'category', data: quarters },
+        yAxis:{ show:false },
         series
       });
+      window.addEventListener('resize', ()=> chart.resize());
     })();
   </script>
 </body>
