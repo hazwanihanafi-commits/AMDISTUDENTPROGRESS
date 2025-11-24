@@ -1,0 +1,23 @@
+/* public/css/printable.css */
+:root {
+  --purple: #5b2b7b;
+  --light-purple: #f1e6f4;
+  --yellow: #ffd600;
+}
+body{ font-family: "Segoe UI", Roboto, Arial, sans-serif; margin:0; color:#222; }
+.print-header { background: var(--purple); color: #fff; padding:22px 12px; text-align:center; font-weight:700; letter-spacing:1px; }
+.print-wrap { display:flex; gap:24px; padding:24px; max-width:1200px; margin:0 auto; }
+.left { flex:1; }
+.right { width:320px; }
+.student-meta div{ margin-bottom:8px; font-size:15px; }
+.timeline-table { width:100%; border-collapse:collapse; margin-top:12px; }
+.timeline-table th { background: var(--light-purple); padding:10px; text-align:left; }
+.timeline-table td { padding:10px; border:1px solid #eee; vertical-align:top; }
+.sign-block { margin-top:22px; font-size:15px; }
+.progress-card { background: var(--light-purple); padding:18px; border-radius:10px; text-align:center; }
+.ring { width:200px; height:200px; border-radius:50%; margin:10px auto; background: conic-gradient(var(--yellow) 0deg, #eee 0deg); display:block; box-shadow: 0 8px 18px rgba(0,0,0,0.06), inset 0 -6px 18px rgba(0,0,0,0.02); }
+.pct { font-size:26px; font-weight:700; color: var(--purple); margin-top:8px; }
+@media print {
+  .progress-card { page-break-inside: avoid; }
+}
+button { padding:8px 14px; background:var(--purple); color:#fff; border:none; border-radius:6px; cursor:pointer; }
