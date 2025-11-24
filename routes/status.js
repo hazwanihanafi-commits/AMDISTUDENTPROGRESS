@@ -1,65 +1,37 @@
 // routes/status.js (ESM)
 import express from 'express';
 import { google } from 'googleapis';
+import { getSheetsClientFromEnv, findExistingTab, readSheetRows } from './_helpers/googleSheets.js';
 
 const router = express.Router();
 
-async function getSheets() {
-  const creds = JSON.parse(process.env.SERVICE_ACCOUNT_JSON);
-  const jwt = new google.auth.JWT(
-    creds.client_email,
-    null,
-    creds.private_key,
-    ["https://www.googleapis.com/auth/spreadsheets"]
-  );
-  await jwt.authorize();
-  return google.sheets({ version: "v4", auth: jwt });
-}
-
-router.get("/status", async (req, res) => {
+/**
+ * GET /api/students
+ * returns array of rows (object form) from MasterTracking (header -> value)
+ */
+router.get('/students', async (req, res) => {
   try {
-    const matric = (req.query.matric || "").trim();
-    if (!matric) {
-      return res.json({ status: "error", message: "matric required" });
+    const sheets = await getSheetsClientFromEnv();
+    const spreadsheetId = process.env.SHEET_ID;
+    if (!spreadsheetId) return res.status(500).json({ status:'error', message:'SHEET_ID missing' });
+
+    const tab = await findExistingTab(sheets, spreadsheetId);
+    const rows = await readSheetRows(sheets, spreadsheetId, tab);
+    if (!rows.length) return res.json({ status:'ok', students: [] });
+
+    const headers = rows[0].map(h => (h||'').toString().trim());
+    const students = [];
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      const obj = {};
+      headers.forEach((h, idx) => obj[h] = r[idx] !== undefined ? r[idx] : '');
+      students.push(obj);
     }
 
-    const SHEET_ID = process.env.SHEET_ID;
-    const sheets = await getSheets();
-
-    // Read full sheet
-    const r = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: "MasterTracking!A1:Z2000",
-    });
-
-    const rows = r.data.values || [];
-    const headers = rows[0];
-
-    // Find Matric column
-    const mIndex = headers.findIndex(h => /matric/i.test(h));
-    if (mIndex === -1) {
-      return res.json({ status: "error", message: "Matric column missing" });
-    }
-
-    // Find matching student row
-    const row = rows.find(r => (r[mIndex] || "").toString() === matric);
-    if (!row) {
-      return res.json({ status: "error", message: "Not found" });
-    }
-
-    // Convert row to object
-    const obj = {};
-    headers.forEach((h, i) => obj[h] = row[i] || "");
-
-    res.json({
-      status: "ok",
-      row: obj,
-      raw: obj
-    });
-
+    return res.json({ status:'ok', students });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ status: "error", message: err.toString() });
+    console.error('students err', err);
+    return res.status(500).json({ status:'error', message: err && err.toString ? err.toString() : String(err) });
   }
 });
 
