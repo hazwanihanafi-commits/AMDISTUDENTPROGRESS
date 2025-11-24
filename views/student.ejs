@@ -16,8 +16,7 @@
     <!-- top -->
     <div class="topbar">
       <div class="logo">
-        <!-- small logo icon (not a banner) -->
-        <img src="<%= '/mnt/data/55967c05-4c3d-4b29-9837-2300162bc3bf.png' %>" alt="logo" style="width:100%;height:100%;object-fit:cover"/>
+        <img src="/assets/logo.png" alt="logo" style="width:100%;height:100%;object-fit:cover"/>
       </div>
       <div>
         <div class="title">AMDI Student Progress</div>
@@ -30,7 +29,7 @@
 
     <div class="grid">
 
-      <!-- left column: student card + donut -->
+      <!-- left column -->
       <div>
         <div class="card student-card">
           <div class="avatar"><%= student.name.split(' ').map(n=>n[0]).slice(0,2).join('') %></div>
@@ -38,7 +37,7 @@
             <h2><%= student.name %></h2>
             <p><strong>Matric:</strong> <%= student.matric %> &nbsp; | &nbsp; <strong>Program:</strong> <%= student.programme %></p>
             <div class="meta-list">
-              <span class="badge"><strong>Status:</strong> <%= (timeline && timeline.status) ? timeline.status : student.progress.level %></span>
+              <span class="badge"><strong>Status:</strong> <%= student.timeline.status %></span>
               <span class="muted">Supervisor: <%= student.supervisorEmail || '—' %></span>
             </div>
           </div>
@@ -54,8 +53,9 @@
         </div>
       </div>
 
-      <!-- right column: milestone table + timeline -->
+      <!-- right column -->
       <div class="right-pane">
+
         <!-- milestone table -->
         <div class="card">
           <h3 style="margin:0 0 8px 0; color:var(--navy)">Milestones (P1 → P5)</h3>
@@ -64,40 +64,31 @@
               <tr>
                 <th>Milestone</th>
                 <th>Expected (Quarter)</th>
-                <th style="width:110px">Submitted</th>
-                <th style="width:110px">Approved</th>
-                <th style="width:110px">Status</th>
+                <th>Submitted</th>
+                <th>Approved</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              <% student.timeline.milestones.forEach(function(m){ %>
-                <tr>
-                  <td><strong><%= m.id %></strong></td>
-                  <td><%= m.expectedQuarter %></td>
-                  <td><%= m.submitted ? '✓' : '' %></td>
-                  <td><%= m.approved ? '✓' : '' %></td>
-                  <td>
-                    <% if (m.approved) { %>
-                      <span class="status-pill status-on">Approved</span>
-                    <% } else if (m.submitted) { %>
-                      <span class="status-pill status-sub">Submitted</span>
-                    <% } else { %>
-                      <span class="status-pill status-pend">Pending</span>
-                    <% } %>
-                  </td>
-                </tr>
+              <% student.timeline.milestones.forEach(m => { %>
+              <tr>
+                <td><strong><%= m.id %></strong></td>
+                <td><%= m.expectedQuarter %></td>
+                <td><%= m.submitted ? "✓" : "" %></td>
+                <td><%= m.approved ? "✓" : "" %></td>
+                <td>
+                  <% if (m.approved) { %>
+                    <span class="status-pill status-on">Approved</span>
+                  <% } else if (m.submitted) { %>
+                    <span class="status-pill status-sub">Submitted</span>
+                  <% } else { %>
+                    <span class="status-pill status-pend">Pending</span>
+                  <% } %>
+                </td>
+              </tr>
               <% }) %>
             </tbody>
           </table>
-
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
-            <div class="legend">
-              <div class="item"><span class="swatch" style="background:var(--success)"></span> Approved</div>
-              <div class="item"><span class="swatch" style="background:var(--warning)"></span> Submitted</div>
-              <div class="item"><span class="swatch" style="background:#bdc3c7"></span> Pending</div>
-            </div>
-            <div class="muted">Start date: <strong><%= student.startDate %></strong></div>
-          </div>
         </div>
 
         <!-- timeline chart -->
@@ -105,13 +96,10 @@
           <h4 style="margin:0 0 8px 0; color:var(--navy)">Expected vs Actual Timeline</h4>
           <div id="timelineChart"></div>
 
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
-            <div class="legend">
-              <div class="item"><span class="swatch" style="background:#bdc3c7"></span> Expected slot</div>
-              <div class="item"><span class="swatch" style="background:var(--warning)"></span> Submitted</div>
-              <div class="item"><span class="swatch" style="background:var(--success)"></span> Approved</div>
-            </div>
-            <div class="muted">Timeline covers quarters from <strong><%= student.timeline.quarters[0] %></strong> to <strong><%= student.timeline.quarters[student.timeline.quarters.length-1] %></strong></div>
+          <div class="legend" style="margin-top:10px;">
+            <div class="item"><span class="swatch" style="background:#bdc3c7"></span> Expected</div>
+            <div class="item"><span class="swatch" style="background:var(--warning)"></span> Submitted</div>
+            <div class="item"><span class="swatch" style="background:var(--success)"></span> Approved</div>
           </div>
         </div>
 
@@ -120,110 +108,74 @@
 
   </div>
 
-  <!-- ECharts render scripts -->
+  <!-- CHART SCRIPTS -->
   <script>
-    // data passed from server
     const student = <%- JSON.stringify(student) %>;
-    const timeline = <%- JSON.stringify(timeline || student.timeline) %>;
+    const timeline = student.timeline;
 
-    // ---------- DONUT ----------
-    (function(){
-      const dom = document.getElementById('donutChart');
-      const chart = echarts.init(dom);
-      const pct = student.progress.percentage || 0;
+    // DONUT CHART
+    (function () {
+      const chart = echarts.init(document.getElementById("donutChart"));
+      const pct = student.progress.percentage;
 
-      const option = {
+      chart.setOption({
         title: {
-          text: pct + '%',
-          left: 'center',
-          top: '42%',
-          textStyle: { fontSize: 24, color: '#0d47a1', fontWeight:800 }
+          text: pct + "%",
+          left: "center",
+          top: "42%",
+          textStyle: { fontSize: 24, color: "#0d47a1", fontWeight: 800 }
         },
-        tooltip: { show:false },
-        series: [
-          {
-            type: 'pie',
-            radius: ['60%','85%'],
-            avoidLabelOverlap: false,
-            label: { show:false },
-            hoverAnimation: false,
-            data: [
-              { value: pct, name: 'Completed', itemStyle: { color: 'rgba(13,71,161,0.95)' } },
-              { value: 100 - pct, name: 'Remaining', itemStyle: { color: 'rgba(13,71,161,0.12)' } }
-            ]
-          }
-        ]
-      };
-
-      chart.setOption(option);
-      window.addEventListener('resize', ()=> chart.resize());
+        series: [{
+          type: "pie",
+          radius: ["60%", "85%"],
+          label: { show: false },
+          data: [
+            { value: pct, itemStyle: { color: "rgba(13,71,161,0.95)" }},
+            { value: 100 - pct, itemStyle: { color: "rgba(13,71,161,0.12)" }}
+          ]
+        }]
+      });
     })();
 
-    // ---------- TIMELINE (horizontal lanes) ----------
-    (function(){
-      const dom = document.getElementById('timelineChart');
-      const chart = echarts.init(dom);
+    // TIMELINE BAR CHART
+    (function () {
+      const chart = echarts.init(document.getElementById("timelineChart"));
 
-      const quarters = timeline.quarters; // e.g., ["Y1Q1","Y1Q2",...]
-      const milestones = timeline.milestones; // array of {id, expectedQuarter, submitted, approved}
-
-      // Build series: expected slot = thin background, submitted/approved overlay
-      const expectedSeries = milestones.map((m, idx) => {
-        const data = quarters.map(q => q === m.expectedQuarter ? 1 : 0);
-        return {
-          name: m.id + ' (expected)',
-          type: 'bar',
-          stack: 'expected' + idx,
-          data,
-          barWidth: 18,
-          itemStyle: { color: '#bdc3c7' },
-          emphasis: { itemStyle: { color:'#9aa7c7' } }
-        };
-      });
-
-      const submittedSeries = milestones.map((m, idx) => {
-        const data = quarters.map(q => (m.submitted && q === m.expectedQuarter) ? 1 : 0 );
-        return {
-          name: m.id + ' (submitted)',
-          type: 'bar',
-          stack: 'submitted' + idx,
-          data,
-          barWidth: 18,
-          itemStyle: { color: '#f1c40f' },
-        };
-      });
-
-      const approvedSeries = milestones.map((m, idx) => {
-        const data = quarters.map(q => (m.approved && q === m.expectedQuarter) ? 1 : 0 );
-        return {
-          name: m.id + ' (approved)',
-          type: 'bar',
-          stack: 'approved' + idx,
-          data,
-          barWidth: 18,
-          itemStyle: { color: '#2ecc71' },
-        };
-      });
-
-      // concat series such that expected sits at bottom, then submitted, then approved overlays
+      const quarters = timeline.quarters;
+      const milestones = timeline.milestones;
       const series = [];
-      for (let i=0;i<milestones.length;i++){
-        series.push(expectedSeries[i]);
-        series.push(submittedSeries[i]);
-        series.push(approvedSeries[i]);
-      }
 
-      const option = {
-        legend: { data: series.map(s=>s.name), top: 0 },
-        tooltip: { show:true },
-        grid: { left: '3%', right:'6%', bottom:'3%', containLabel:true },
-        xAxis: { type:'category', data: quarters, axisLabel: { rotate: 0, fontSize:12 } },
-        yAxis: { show:false },
+      milestones.forEach((m, idx) => {
+        series.push({
+          name: m.id + " expected",
+          type: "bar",
+          stack: m.id,
+          itemStyle: { color: "#bdc3c7" },
+          data: quarters.map(q => q === m.expectedQuarter ? 1 : 0)
+        });
+        series.push({
+          name: m.id + " submitted",
+          type: "bar",
+          stack: m.id,
+          itemStyle: { color: "#f1c40f" },
+          data: quarters.map(q => m.submitted && q === m.expectedQuarter ? 1 : 0)
+        });
+        series.push({
+          name: m.id + " approved",
+          type: "bar",
+          stack: m.id,
+          itemStyle: { color: "#2ecc71" },
+          data: quarters.map(q => m.approved && q === m.expectedQuarter ? 1 : 0)
+        });
+      });
+
+      chart.setOption({
+        tooltip: {},
+        grid: { left: "6%", right: "6%", bottom: "3%", containLabel: true },
+        xAxis: { type: "category", data: quarters },
+        yAxis: { show: false },
         series
-      };
-
-      chart.setOption(option);
-      window.addEventListener('resize', ()=> chart.resize());
+      });
     })();
   </script>
 </body>
