@@ -12,9 +12,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
-// ROUTES
 app.use("/", indexRouter);
-app.use("/api", apiRouter);
+app.use("/api", apiRouter);       // <-- VERY IMPORTANT
 app.use("/student", studentRouter);
+
+app.use((req, res) => {
+  res.status(404).send("Page Not Found");
+});
 
 export default app;
