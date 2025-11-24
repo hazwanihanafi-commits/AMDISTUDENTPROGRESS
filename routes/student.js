@@ -4,34 +4,35 @@ import { readMasterTracking } from "../services/googleSheets.js";
 
 const router = express.Router();
 
-router.get("/:matric", async (req, res, next) => {
+/**
+ * GET /student/:matric
+ * Loads a single student's data from Google Sheets,
+ * computes their timeline + progress, and renders student.ejs
+ */
+router.get("/:matric", async (req, res) => {
   try {
+    const matric = String(req.params.matric || "").trim();
+
     // Load all students
     const students = await readMasterTracking(process.env.SHEET_ID);
 
-    // Find student by matric number
+    // Find student
     const student = students.find(
-      (s) => String(s.matric).trim() === String(req.params.matric).trim()
+      (s) => String(s.matric).trim() === matric
     );
 
     if (!student) {
       return res.status(404).send("Student not found");
     }
 
-    // IMPORTANT:
-    // Do NOT compute timeline again.
-    // readMasterTracking already produced:
-    // student.timeline = { quarters, milestones, status }
-
+    // Render the student profile page using student.timeline directly
     res.render("student", {
-      student,
-      timeline: student.timeline, // correct!
-      imagePath: "/assets/timeline.png", // optional
+      student
     });
 
   } catch (err) {
-    console.error("Error in /student route:", err);
-    next(err);
+    console.error("ERROR in /student/:matric →", err);
+    res.status(500).send("Internal Server Error");
   }
 });
 
