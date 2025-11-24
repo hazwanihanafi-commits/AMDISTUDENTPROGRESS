@@ -1,4 +1,4 @@
-// server.js — FULLY FIXED ESM VERSION
+// server.js — COMPLETE FIXED VERSION FOR RENDER (ES MODULES)
 
 import express from 'express';
 import session from 'express-session';
@@ -17,9 +17,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ---------------------------------------------------------------------------
-// CREATE APP FIRST (IMPORTANT! app MUST exist before app.use())
+// CREATE APP FIRST
 // ---------------------------------------------------------------------------
-const app = express();        // <--- DO THIS BEFORE USING app.use()
+const app = express();
 
 // ---------------------------------------------------------------------------
 // MIDDLEWARE
@@ -39,12 +39,12 @@ app.use(session({
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---------------------------------------------------------------------------
-// ROUTES (NOW SAFE TO LOAD)
+// ROUTES (timeline first)
 // ---------------------------------------------------------------------------
-app.use('/api', apiTimelineRoutes);     // <--- FIXED (this must be AFTER app creation)
+app.use('/api', apiTimelineRoutes);
 
 // ---------------------------------------------------------------------------
-// ENVIRONMENT VARIABLES
+// ENV VARIABLES
 // ---------------------------------------------------------------------------
 const SHEET_ID = process.env.SHEET_ID;
 const SERVICE_ACCOUNT_JSON = process.env.SERVICE_ACCOUNT_JSON;
@@ -54,15 +54,11 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@usm.my';
 // GOOGLE SHEETS CLIENT
 // ---------------------------------------------------------------------------
 let sheetsClient = null;
+
 async function getSheets() {
   if (sheetsClient) return sheetsClient;
 
-  if (!SERVICE_ACCOUNT_JSON) {
-    throw new Error('Missing SERVICE_ACCOUNT_JSON');
-  }
-
   const creds = JSON.parse(SERVICE_ACCOUNT_JSON);
-
   const jwt = new google.auth.JWT(
     creds.client_email,
     null,
@@ -99,45 +95,41 @@ async function readMasterTracking() {
 }
 
 // ---------------------------------------------------------------------------
-// AUTH + ROLE HANDLING (UNMODIFIED FROM YOUR CODE)
+// AUTH / ROLE
 // ---------------------------------------------------------------------------
 async function getUserRole(email) {
   if (!email) return { role: null };
   const rows = await readMasterTracking();
 
-  const studentEmailFields = ['Student Email', 'Email'];
-  const supervisorEmailFields = ['Supervisor Email'];
+  const stuFields = ['Student Email', 'Email'];
+  const supFields = ['Supervisor Email'];
 
-  // ADMIN CHECK
   if (email.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
     return { role: 'admin', details: { email } };
   }
 
-  // SUPERVISOR CHECK
   const supMatches = rows.filter(r =>
-    supervisorEmailFields.some(k => (r[k] || '').toLowerCase() === email.toLowerCase())
+    supFields.some(k => (r[k] || '').toLowerCase() === email.toLowerCase())
   );
 
-  if (supMatches.length > 0) {
+  if (supMatches.length) {
     return {
       role: 'supervisor',
       details: {
         email,
         students: supMatches.map(r => ({
           name: r['Student Name'],
-          matric: r['Matric No'],
-          row: r
+          matric: r['Matric No']
         }))
       }
     };
   }
 
-  // STUDENT CHECK
   const stuMatches = rows.filter(r =>
-    studentEmailFields.some(k => (r[k] || '').toLowerCase() === email.toLowerCase())
+    stuFields.some(k => (r[k] || '').toLowerCase() === email.toLowerCase())
   );
 
-  if (stuMatches.length > 0) {
+  if (stuMatches.length) {
     const s = stuMatches[0];
     return {
       role: 'student',
@@ -194,14 +186,110 @@ app.get('/admin', requireLogin, (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// API: STATUS (student or supervisor query)
+// ---------------------------------------------------------------------------
+app.get('/api/status', requireLogin, async (req, res) => {
+  const rows = await readMasterTracking();
+
+  if (req.session.user.role === 'student') {
+    const email = req.session.user.details.email.toLowerCase();
+    const r = rows.find(row => (row['Student Email'] || '').toLowerCase() === email);
+    return res.json({ status: 'ok', row: r });
+  }
+
+  const matric = req.query.matric;
+  const r = rows.find(r => r['Matric No'] == matric || r['Matric'] == matric);
+  return res.json({ status: 'ok', row: r });
+});
+
+// ---------------------------------------------------------------------------
+// API: APPROVE (supervisor/admin)
+// ---------------------------------------------------------------------------
+app.post('/api/approve', requireLogin, async (req, res) => {
+  const { matric, stage } = req.body;
+
+  if (!['supervisor', 'admin'].includes(req.session.user.role)) {
+    return res.status(403).json({ status: 'error', message: 'not allowed' });
+  }
+
+  const sheets = await getSheets();
+  const read = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: 'MasterTracking!A1:Z2000'
+  });
+
+  const rows = read.data.values || [];
+  const headers = rows[0];
+  const mIndex = headers.indexOf('Matric No');
+
+  let rowId = rows.findIndex(r => r[mIndex] == matric);
+
+  if (rowId === -1) return res.json({ status: 'error', message: 'not found' });
+
+  const approvalCol = headers.indexOf(`${stage} Approved`);
+  if (approvalCol === -1) return res.json({ status: 'error', message: 'missing column' });
+
+  const colLetter = String.fromCharCode(65 + approvalCol);
+  const timestamp = new Date().toLocaleString();
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SHEET_ID,
+    range: `MasterTracking!${colLetter}${rowId + 1}`,
+    valueInputOption: 'RAW',
+    resource: { values: [[timestamp]] }
+  });
+
+  return res.json({ status: 'ok' });
+});
+
+// ---------------------------------------------------------------------------
+// API: DASHBOARD SUMMARY
+// ---------------------------------------------------------------------------
+app.get('/api/dashboardData', requireLogin, async (req, res) => {
+  const rows = await readMasterTracking();
+  const totals = {
+    total: rows.length,
+    P1: rows.filter(r => r['P1 Submitted']).length,
+    P3: rows.filter(r => r['P3 Submitted']).length,
+    P4: rows.filter(r => r['P4 Submitted']).length,
+    P5: rows.filter(r => r['P5 Submitted']).length
+  };
+  res.json({ status: 'ok', totals });
+});
+
+// ---------------------------------------------------------------------------
+// API: APPROVAL_LOG (CSV EXPORT)
+// ---------------------------------------------------------------------------
+app.get('/api/approval_log', requireLogin, async (req, res) => {
+  if (!['admin','supervisor'].includes(req.session.user.role))
+    return res.status(403).send('forbidden');
+
+  const rows = await readMasterTracking();
+
+  const csvRows = rows.map(r => ({
+    StudentName: r['Student Name'] || '',
+    Matric: r['Matric No'] || '',
+    P1Approved: r['P1 Approved'] || '',
+    P3Approved: r['P3 Approved'] || '',
+    P4Approved: r['P4 Approved'] || '',
+    P5Approved: r['P5 Approved'] || ''
+  }));
+
+  const csv = stringify(csvRows, { header: true });
+  res.setHeader('Content-Disposition', 'attachment; filename=approval_log.csv');
+  res.setHeader('Content-Type', 'text/csv');
+  res.send(csv);
+});
+
+// ---------------------------------------------------------------------------
 // HEALTH CHECK
 // ---------------------------------------------------------------------------
 app.get('/api/health', async (req, res) => {
   try {
     await getSheets();
     res.json({ status: 'ok' });
-  } catch (err) {
-    res.json({ status: 'error', message: err.toString() });
+  } catch (e) {
+    res.json({ status: 'error', message: e.toString() });
   }
 });
 
