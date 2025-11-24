@@ -3,8 +3,8 @@ import xlsx from 'xlsx';
 import fs from 'fs';
 import path from 'path';
 
-const MScPath = '/mnt/data/AMDI–P2A_StudentYearPlan_MSc.xlsx';
-const PhDPath = '/mnt/data/AMDI–P2b_StudentYearPlan_PhD.xlsx';
+const MScPath = './templates/AMDI-P2A_StudentYearPlan_MSc.xlsx';
+const PhDPath = './templates/AMDI-P2B_StudentYearPlan_PhD.xlsx';
 
 function parseTemplate(filePath) {
   if (!fs.existsSync(filePath)) {
