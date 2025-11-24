@@ -1,4 +1,8 @@
 // server.js
+
+import timelineRoutes from './routes/timeline.js';
+app.use('/api', timelineRoutes);
+
 const express = require('express');
 const session = require('express-session');
 const bodyParser = require('body-parser');
@@ -341,3 +345,4 @@ app.get('/api/health', async (req, res) => {
 // start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server listening on ${PORT}`));
+
