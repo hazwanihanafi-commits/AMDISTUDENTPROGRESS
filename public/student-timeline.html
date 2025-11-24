@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>AMDI Student Timeline</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  body{font-family:Arial;background:#fff;margin:0;padding:12px;color:#222}
+  header{background:#5b2b7b;color:#fff;padding:14px;text-align:center;font-weight:700}
+  .container{max-width:1200px;margin:14px auto}
+  .controls{display:flex;gap:8px;align-items:center;margin:12px 0}
+  input,select{padding:8px;border-radius:6px;border:1px solid #ccc}
+  button{padding:8px 10px;border-radius:6px;border:none;background:#5b2b7b;color:#fff}
+  .timeline{width:100%;border-collapse:collapse;margin-top:12px}
+  .timeline th, .timeline td{border:1px solid #cfc9d9;padding:8px;font-size:13px}
+  .timeline th{background:#efe3f5;color:#5b2b7b}
+  .tick{width:18px;height:18px;display:inline-grid;place-items:center;border:1px solid #9fcfa0;border-radius:3px}
+  .tick.on{background:#9fd8a3;color:#fff;border-color:transparent}
+  .quarter-cell{background:#fafafc}
+  .progress-ring{width:200px;height:200px;border-radius:50%;display:grid;place-items:center;margin-left:auto}
+  .progress-core{width:120px;height:120px;border-radius:50%;background:#fff;display:grid;place-items:center}
+  .small{font-size:13px;color:#666}
+  @media (max-width:1000px){ .progress-ring{margin:12px auto} }
+</style>
+</head>
+<body>
+<header>AMDI STUDENT PROGRESS</header>
+<div class="container">
+  <div class="controls">
+    <input id="matric" placeholder="Enter matric"/>
+    <select id="template"><option value="m">MSc template</option><option value="p">PhD template</option></select>
+    <button onclick="load()">Load</button>
+    <button onclick="printable()">Printable</button>
+    <div style="margin-left:auto" class="small" id="status">idle</div>
+  </div>
+
+  <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">
+    <div style="flex:1">
+      <table class="timeline" id="tl">
+        <thead id="tlhead"><tr><th>Activity</th><th>Portfolio</th><th>Y1Q1</th><th>Y1Q2</th><th>Y1Q3</th><th>Y1Q4</th><th>Y2Q1</th><th>Y2Q2</th><th>Y2Q3</th><th>Y2Q4</th><th>Y3Q1</th><th>Y3Q2</th><th>Y3Q3</th><th>Y3Q4</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div style="width:320px">
+      <div class="progress-ring" id="ring" style="background:conic-gradient(#5b2b7b 0deg,#eee 0deg);">
+        <div class="progress-core">
+          <div id="pct" style="font-weight:800;font-size:28px;color:#5b2b7b">0%</div>
+          <div class="small">Progress</div>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <div><strong id="studentName">—</strong></div>
+        <div class="small" id="matView">—</div>
+        <div class="small" id="lastUpdate">—</div>
+        <div style="margin-top:8px" id="fileList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function fetchJson(url, opts){ const r = await fetch(url, opts); return await r.json(); }
+function setStatus(s){ document.getElementById('status').textContent = s; }
+
+function buildRows(activities){
+  const tb = document.getElementById('tbody'); tb.innerHTML = '';
+  activities.forEach(a=>{
+    const tr = document.createElement('tr');
+    const cells = ['activity','portfolio','Y1Q1','Y1Q2','Y1Q3','Y1Q4','Y2Q1','Y2Q2','Y2Q3','Y2Q4','Y3Q1','Y3Q2','Y3Q3','Y3Q4'];
+    let html = `<td>${a.activity}</td><td>-</td>`;
+    for(let i=2;i<cells.length;i++) html += `<td class="quarter-cell" data-activity="${a.activity}" data-key="${cells[i]}"></td>`;
+    tr.innerHTML = html;
+    tb.appendChild(tr);
+  });
+}
+
+function fillQuarterTicks(activities){
+  // activities: [{activity, stageValue, quarterTicks:{Y1Q1:true,...}}]
+  const cells = document.querySelectorAll('.quarter-cell');
+  cells.forEach(c=>{
+    const act = c.getAttribute('data-activity');
+    const key = c.getAttribute('data-key');
+    const a = activities.find(x=>x.activity===act);
+    if(!a) return;
+    if(a.quarterTicks && a.quarterTicks[key]) c.innerHTML = '<span class="tick on">✓</span>'; else c.innerHTML = '';
+  });
+}
+
+function fillStageTicks(activities){
+  // use P1,P3,P4,P5 to mark rows (if quarter mapping missing)
+  const rows = document.querySelectorAll('#tbody tr');
+  rows.forEach(tr=>{
+    const activity = tr.cells[0].textContent;
+    const a = activities.find(x=>x.activity===activity);
+    // if any stageValue exists, mark first quarter cell
+    if(a && a.stageValue && a.stageValue.toString().trim()!==''){
+      tr.cells[2].innerHTML = '<span class="tick on">✓</span>';
+    }
+  });
+}
+
+function updateProgress(activities, milestones){
+  const stages = ['P1','P3','P4','P5'];
+  let done = 0;
+  stages.forEach(s=>{ if(milestones[s] && String(milestones[s]).trim()!=='') done++; });
+  const pct = Math.round((done/4)*100);
+  document.getElementById('pct').textContent = pct + '%';
+  const deg = Math.round((pct/100)*360);
+  document.getElementById('ring').style.background = `conic-gradient(#5b2b7b ${deg}deg,#eee ${deg}deg)`;
+}
+
+async function load(){
+  const m = document.getElementById('matric').value.trim();
+  if(!m) return alert('enter matric');
+  const tpl = document.getElementById('template').value;
+  setStatus('loading');
+  try{
+    const j = await fetchJson(`/api/timeline?matric=${encodeURIComponent(m)}&template=${tpl}`);
+    if(j.status !== 'ok'){ setStatus('not_found'); alert('student not found'); return; }
+    document.getElementById('studentName').textContent = j.studentName || '-';
+    document.getElementById('matView').textContent = 'Matric: ' + (j.matric||'-');
+    document.getElementById('lastUpdate').textContent = 'Last update: ' + (j.lastUpdate||'-');
+    // build rows based on returned activities
+    buildRows(j.activities);
+    if(j.quarterKeys && j.quarterKeys.length>0){
+      fillQuarterTicks(j.activities);
+    } else {
+      fillStageTicks(j.activities);
+    }
+    updateProgress(j.activities, j.milestones);
+    // files
+    const fl = document.getElementById('fileList'); fl.innerHTML = '';
+    if(j.milestones && j.milestones.P5_DocUrl){ fl.innerHTML = `<a href="${j.milestones.P5_DocUrl}" target="_blank">P5 report</a>`;}
+    setStatus('ok');
+  }catch(e){
+    console.error(e); setStatus('error'); alert('error loading timeline');
+  }
+}
+
+function printable(){
+  const matric = document.getElementById('matric').value.trim();
+  if(!matric) return alert('enter matric');
+  // open printable route with query
+  window.open('/printable.html?matric=' + encodeURIComponent(matric), '_blank');
+}
+</script>
+</body>
+</html>
