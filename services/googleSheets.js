@@ -21,6 +21,25 @@ export async function readRange(spreadsheetId, range) {
   return res.data.values || [];
 }
 
+// Convert Google serial date → JS date
+function parseDate(value) {
+  if (!value) return null;
+
+  // Case 1: Already string date
+  if (typeof value === "string" && value.includes("/")) {
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // Case 2: Google serial number (e.g. 44500)
+  if (!isNaN(value)) {
+    const excelEpoch = new Date(1899, 11, 30);
+    return new Date(excelEpoch.getTime() + value * 86400000);
+  }
+
+  return null;
+}
+
 export async function readMasterTracking(spreadsheetId) {
   const rows = await readRange(spreadsheetId, "MasterTracking!A1:Z1000");
 
@@ -33,12 +52,13 @@ export async function readMasterTracking(spreadsheetId) {
     const s = {};
     header.forEach((h, i) => (s[h] = row[i] || ""));
 
-    // Normalized fields
+    const startDateConverted = parseDate(s["Start Date"]);
+
     const mapped = {
-      matric: s["Matric"] || s["Matric No"] || "",
+      matric: s["Matric"] || "",
       name: s["Student Name"] || "",
       programme: s["Programme"] || "",
-      startDate: s["Start Date"] || "",
+      startDate: startDateConverted, // FIXED
 
       p1Submitted: !!s["P1 Submitted"],
       p1Approved: !!s["P1 Approved"],
@@ -53,34 +73,15 @@ export async function readMasterTracking(spreadsheetId) {
       studentEmail: s["Student's Email"] || "",
     };
 
-    // Determine MSc or PhD
     const isPhD =
       mapped.programme &&
       mapped.programme.toLowerCase().includes("philosophy");
 
-    // Expected duration logic
     const expectedMonths = isPhD
-      ? { P1: 0, P3: 3, P4: 6, P5: 24 } // PhD = 3 years max, P5 by month 24
-      : { P1: 0, P3: 3, P4: 6, P5: 12 }; // MSc = 2 years max, P5 by month 12
+      ? { P1: 0, P3: 3, P4: 6, P5: 24 }
+      : { P1: 0, P3: 3, P4: 6, P5: 12 };
 
-    // Build expected timeline
-    mapped.timeline = buildTimeline(
-      {
-        startDate: mapped.startDate,
-
-        p1Submitted: mapped.p1Submitted,
-        p1Approved: mapped.p1Approved,
-        p3Submitted: mapped.p3Submitted,
-        p3Approved: mapped.p3Approved,
-        p4Submitted: mapped.p4Submitted,
-        p4Approved: mapped.p4Approved,
-        p5Submitted: mapped.p5Submitted,
-        p5Approved: mapped.p5Approved,
-      },
-      expectedMonths
-    );
-
-    // Compute progress % & level
+    mapped.timeline = buildTimeline(mapped, expectedMonths);
     mapped.progress = calcProgress(mapped);
 
     return mapped;
