@@ -71,8 +71,9 @@
         </div>
 
         <div class="timeline-box">
-          <h4>Timeline</h4>
+          <h4>Timeline & Activities</h4>
           <div id="timelineChart" style="height:220px;"></div>
+
           <div style="margin-top:10px;">
             <strong>Activities grouped by milestone</strong>
             <div style="margin-top:8px;">
@@ -101,7 +102,6 @@
     const student = <%- JSON.stringify(student) %>;
     const timeline = student.timeline || { quarters: [], milestones: [] };
 
-    // Donut
     (function(){
       const dom = document.getElementById('donutChart');
       const chart = echarts.init(dom);
@@ -116,7 +116,6 @@
       window.addEventListener('resize', ()=> chart.resize());
     })();
 
-    // Timeline bars
     (function(){
       const dom = document.getElementById('timelineChart');
       const chart = echarts.init(dom);
@@ -124,43 +123,13 @@
       const milestones = timeline.milestones || [];
 
       const series = [];
-      milestones.forEach((m, idx) => {
-        // expected
-        series.push({
-          name: m.id + ' expected',
-          type: 'bar',
-          stack: m.id,
-          itemStyle:{ color: '#bdc3c7' },
-          data: quarters.map(q => q === m.expectedQuarter ? 1 : 0),
-          barWidth: 16
-        });
-        // submitted
-        series.push({
-          name: m.id + ' submitted',
-          type: 'bar',
-          stack: m.id,
-          itemStyle:{ color: '#f1c40f' },
-          data: quarters.map(q => (m.submitted && q === m.expectedQuarter) ? 1 : 0),
-          barWidth: 16
-        });
-        // approved
-        series.push({
-          name: m.id + ' approved',
-          type: 'bar',
-          stack: m.id,
-          itemStyle:{ color: '#2ecc71' },
-          data: quarters.map(q => (m.approved && q === m.expectedQuarter) ? 1 : 0),
-          barWidth: 16
-        });
+      milestones.forEach((m) => {
+        series.push({ name: m.id + ' expected', type: 'bar', stack: m.id, itemStyle:{ color: '#bdc3c7' }, data: quarters.map(q => q === m.expectedQuarter ? 1 : 0), barWidth: 16 });
+        series.push({ name: m.id + ' submitted', type: 'bar', stack: m.id, itemStyle:{ color: '#f1c40f' }, data: quarters.map(q => (m.submitted && q === m.expectedQuarter) ? 1 : 0), barWidth: 16 });
+        series.push({ name: m.id + ' approved', type: 'bar', stack: m.id, itemStyle:{ color: '#2ecc71' }, data: quarters.map(q => (m.approved && q === m.expectedQuarter) ? 1 : 0), barWidth: 16 });
       });
 
-      chart.setOption({
-        tooltip:{},
-        grid:{ left:'3%', right:'4%', bottom:'3%', containLabel:true },
-        xAxis:{ type:'category', data: quarters },
-        yAxis:{ show:false },
-        series
-      });
+      chart.setOption({ tooltip:{}, grid:{ left:'3%', right:'4%', bottom:'3%', containLabel:true }, xAxis:{ type:'category', data: quarters }, yAxis:{ show:false }, series });
       window.addEventListener('resize', ()=> chart.resize());
     })();
   </script>
