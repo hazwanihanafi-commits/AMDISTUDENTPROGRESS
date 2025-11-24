@@ -1,80 +1,89 @@
 // services/googleSheets.js
 import { google } from "googleapis";
-import { buildTimeline } from "../helpers/timeline.js";
+import { buildTimeline } from "../helpers/buildTimeline.js";
 import { calcProgress } from "../helpers/progress.js";
 
-/**
- * Google Sheets Auth Helper
- */
 async function getSheetsClient() {
   const auth = new google.auth.GoogleAuth({
     credentials: JSON.parse(process.env.GOOGLE_SERVICE_KEY),
-    scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
 
-  const client = await auth.getClient();
-  return google.sheets({ version: "v4", auth: client });
+  return google.sheets({ version: "v4", auth: await auth.getClient() });
 }
 
-/**
- * Read MasterTracking sheet
- */
-export async function readMasterTracking(spreadsheetId) {
-  const sheets = await getSheetsClient();
-
-  const res = await sheets.spreadsheets.values.get({
+export async function readRange(spreadsheetId, range) {
+  const client = await getSheetsClient();
+  const res = await client.spreadsheets.values.get({
     spreadsheetId,
-    range: "MasterTracking!A1:Z2000"
+    range,
   });
+  return res.data.values || [];
+}
 
-  const rows = res.data.values;
-  if (!rows || rows.length < 2) return [];
+export async function readMasterTracking(spreadsheetId) {
+  const rows = await readRange(spreadsheetId, "MasterTracking!A1:Z1000");
 
-  const header = rows[0].map(h => h.trim());
+  if (!rows.length) return [];
+
+  const header = rows[0].map((h) => h.trim());
   const data = rows.slice(1);
 
-  const students = data.map(row => {
-    const obj = {};
+  const students = data.map((row) => {
+    const s = {};
+    header.forEach((h, i) => (s[h] = row[i] || ""));
 
-    // Build row -> object mapping
-    header.forEach((col, i) => {
-      obj[col] = row[i] || "";
-    });
+    // Normalized fields
+    const mapped = {
+      matric: s["Matric"] || s["Matric No"] || "",
+      name: s["Student Name"] || "",
+      programme: s["Programme"] || "",
+      startDate: s["Start Date"] || "",
 
-    // Format student object based on your exact sheet headers
-    const student = {
-      matric: obj["Matric"] || "",
-      name: obj["Student Name"] || "",
-      programme: obj["Programme"] || "",
-      startDate: obj["Start Date"] || "",
-      supervisorEmail: obj["Main Supervisor's Email"] || "",
-      studentEmail: obj["Student's Email"] || "",
+      p1Submitted: !!s["P1 Submitted"],
+      p1Approved: !!s["P1 Approved"],
+      p3Submitted: !!s["P3 Submitted"],
+      p3Approved: !!s["P3 Approved"],
+      p4Submitted: !!s["P4 Submitted"],
+      p4Approved: !!s["P4 Approved"],
+      p5Submitted: !!s["P5 Submitted"],
+      p5Approved: !!s["P5 Approved"],
 
-      p1Submitted: !!obj["P1 Submitted"],
-      p1Approved: !!obj["P1 Approved"],
-      p3Submitted: !!obj["P3 Submitted"],
-      p3Approved: !!obj["P3 Approved"],
-      p4Submitted: !!obj["P4 Submitted"],
-      p4Approved: !!obj["P4 Approved"],
-      p5Submitted: !!obj["P5 Submitted"],
-      p5Approved: !!obj["P5 Approved"]
+      supervisorEmail: s["Main Supervisor's Email"] || "",
+      studentEmail: s["Student's Email"] || "",
     };
 
-    // Detect programme type
-    const isPhD = student.programme.toLowerCase().includes("philosophy");
+    // Determine MSc or PhD
+    const isPhD =
+      mapped.programme &&
+      mapped.programme.toLowerCase().includes("philosophy");
 
-    // Correct durations (you confirmed: PhD = 3 yr, MSc = 2 yr)
+    // Expected duration logic
     const expectedMonths = isPhD
-      ? { P1: 0, P3: 3, P4: 6, P5: 36 }  // PhD = 3 years
-      : { P1: 0, P3: 3, P4: 6, P5: 24 }; // MSc = 2 years
+      ? { P1: 0, P3: 3, P4: 6, P5: 24 } // PhD = 3 years max, P5 by month 24
+      : { P1: 0, P3: 3, P4: 6, P5: 12 }; // MSc = 2 years max, P5 by month 12
 
-    // Build timeline
-    student.timeline = buildTimeline(student, expectedMonths);
+    // Build expected timeline
+    mapped.timeline = buildTimeline(
+      {
+        startDate: mapped.startDate,
 
-    // Progress percentage from 0–100
-    student.progress = calcProgress(student);
+        p1Submitted: mapped.p1Submitted,
+        p1Approved: mapped.p1Approved,
+        p3Submitted: mapped.p3Submitted,
+        p3Approved: mapped.p3Approved,
+        p4Submitted: mapped.p4Submitted,
+        p4Approved: mapped.p4Approved,
+        p5Submitted: mapped.p5Submitted,
+        p5Approved: mapped.p5Approved,
+      },
+      expectedMonths
+    );
 
-    return student;
+    // Compute progress % & level
+    mapped.progress = calcProgress(mapped);
+
+    return mapped;
   });
 
   return students;
