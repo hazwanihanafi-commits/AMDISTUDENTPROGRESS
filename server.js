@@ -6,7 +6,7 @@ import bodyParser from 'body-parser';
 import cors from 'cors';
 import { google } from 'googleapis';
 import path from 'path';
-import csvStringify from 'csv-stringify/lib/sync.js';
+import { stringify } from 'csv-stringify/sync';
 import apiTimelineRoutes from './routes/timeline.js';
 import { fileURLToPath } from 'url';
 
