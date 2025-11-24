@@ -1,60 +1,44 @@
 // routes/timeline.js
 import express from 'express';
-import { google } from 'googleapis';
 import fs from 'fs';
-import { getSheetsClientFromEnv, findExistingTab, readSheetRows, writeCell } from './_helpers/googleSheets.js';
+
+// ⭐ Shared Google Sheets helper
+import {
+  getSheetsClientFromEnv,
+  findExistingTab,
+  readSheetRows,
+  writeCell
+} from './_helpers/googleSheets.js';
 
 const router = express.Router();
 
-// Config: tab priorities
+// Candidate tabs
 const TAB_CANDIDATES = ['MasterTracking', 'Form responses', 'Form responses 1', 'Sheet1'];
 
-// Start date candidate headers
-const START_DATE_KEYS = ['Start Date','StartDate','Start','Registration Date','Timestamp'];
-
-// Default activities fallback
-const DEFAULT_ACTIVITIES = [
-  'Registration & Orientation','Literature Review & Proposal Preparation','Proposal Defence',
-  'Research Ethics Approval (JEPeM)','Research Implementation I','Mid-Candidature Review',
-  'Research Communication I','Research Implementation II','Publication I','Research Dissemination',
-  'Thesis Preparation','Pre-Submission Review (JPMPMP)','Thesis Examination & Completion'
+// Start date header candidates
+const START_DATE_KEYS = [
+  'Start Date', 'StartDate', 'Start',
+  'Registration Date', 'Timestamp'
 ];
 
-async function getSheetsClientFromEnv() {
-  if (!process.env.SERVICE_ACCOUNT_JSON) throw new Error('SERVICE_ACCOUNT_JSON env missing');
-  const creds = typeof process.env.SERVICE_ACCOUNT_JSON === 'string'
-    ? JSON.parse(process.env.SERVICE_ACCOUNT_JSON)
-    : process.env.SERVICE_ACCOUNT_JSON;
-  const jwt = new google.auth.JWT(
-    creds.client_email, null, creds.private_key,
-    ['https://www.googleapis.com/auth/spreadsheets']
-  );
-  await jwt.authorize();
-  return google.sheets({ version: 'v4', auth: jwt });
-}
+// Default activity list (fallback)
+const DEFAULT_ACTIVITIES = [
+  'Registration & Orientation',
+  'Literature Review & Proposal Preparation',
+  'Proposal Defence',
+  'Research Ethics Approval (JEPeM)',
+  'Research Implementation I',
+  'Mid-Candidature Review',
+  'Research Communication I',
+  'Research Implementation II',
+  'Publication I',
+  'Research Dissemination',
+  'Thesis Preparation',
+  'Pre-Submission Review (JPMPMP)',
+  'Thesis Examination & Completion'
+];
 
-async function findExistingTab(sheets, spreadsheetId) {
-  const meta = await sheets.spreadsheets.get({ spreadsheetId });
-  const names = (meta.data.sheets || []).map(s => s.properties.title);
-  for (const t of TAB_CANDIDATES) if (names.includes(t)) return t;
-  return names[0];
-}
-
-async function readSheetRows(sheets, spreadsheetId, tabName) {
-  const range = `${tabName}!A1:Z3000`;
-  const resp = await sheets.spreadsheets.values.get({ spreadsheetId, range });
-  return resp.data.values || [];
-}
-
-async function writeCell(sheets, spreadsheetId, tabName, a1Range, value) {
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: `${tabName}!${a1Range}`,
-    valueInputOption: 'RAW',
-    resource: { values: [[value]] }
-  });
-}
-
+// Convert index → A1 letter
 function colToLetter(col) {
   let s = '';
   while (col >= 0) {
@@ -64,187 +48,212 @@ function colToLetter(col) {
   return s;
 }
 
-function computeQuartersFromStart(startDate, years = 3) {
-  const quarters = [];
-  let cursor = new Date(startDate);
-  for (let y = 1; y <= years; y++) {
-    for (let q = 1; q <= 4; q++) {
-      const start = new Date(cursor);
-      const end = new Date(start);
-      end.setMonth(end.getMonth() + 3);
-      const key = `Y${y}Q${q}`;
-      quarters.push({ key, start: start.toISOString(), end: end.toISOString() });
-      cursor = new Date(end);
-    }
-  }
-  return quarters;
-}
-
+// Date parsing
 function parseDateFlexible(s) {
   if (!s) return null;
-  if (s instanceof Date) return s;
-  const iso = new Date(s);
-  if (!Number.isNaN(iso.getTime())) return iso;
-  const m = String(s).trim().match(/^(\d{1,2})[\/\-\s](\d{1,2})[\/\-\s](\d{2,4})$/);
+  const d = new Date(s);
+  if (!isNaN(d)) return d;
+
+  const m = String(s).trim().match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if (m) {
     const dd = parseInt(m[1],10), mm = parseInt(m[2],10)-1, yy = parseInt(m[3],10);
     return new Date(yy < 100 ? 2000 + yy : yy, mm, dd);
   }
+
   return null;
 }
 
+// Compute quarter groups Y1Q1–Y3Q4
+function computeQuartersFromStart(startDate, years=3) {
+  const q = [];
+  let cursor = new Date(startDate);
+
+  for (let y = 1; y <= years; y++) {
+    for (let qu = 1; qu <= 4; qu++) {
+      const start = new Date(cursor);
+      const end = new Date(start);
+      end.setMonth(end.getMonth() + 3);
+
+      q.push({
+        key: `Y${y}Q${qu}`,
+        start: start.toISOString(),
+        end: end.toISOString()
+      });
+
+      cursor = new Date(end);
+    }
+  }
+
+  return q;
+}
+
+// Load activities (if mapping file exists)
 function loadActivitiesFromMapping(type) {
   try {
-    const p = type === 'phd'
+    const file = type === 'phd'
       ? '/tmp/timeline_mapping_phd.json'
       : '/tmp/timeline_mapping_msc.json';
-    if (fs.existsSync(p)) {
-      const js = JSON.parse(fs.readFileSync(p, 'utf8'));
-      if (js.mapping && js.mapping.length) return js.mapping.map(m => m.activity);
-      if (js.activities && js.activities.length) return js.activities;
+
+    if (fs.existsSync(file)) {
+      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (data.mapping) return data.mapping.map(x => x.activity);
+      if (data.activities) return data.activities;
     }
-  } catch (e) {
-    console.warn('mapping load fail', e && e.toString());
-  }
+  } catch (e) {}
+
   return DEFAULT_ACTIVITIES;
 }
 
-/* GET /api/timeline?matric=...&template=(m|p) */
+//
+// ====================================================================
+//  GET /api/timeline
+// ====================================================================
+//
 router.get('/timeline', async (req, res) => {
   try {
-    const matric = (req.query.matric || '').toString().trim();
-    const tmpl = ((req.query.template || 'm').toString().toLowerCase() === 'p') ? 'phd' : 'msc';
-    if (!matric) return res.status(400).json({ status:'error', message:'missing matric' });
+    const matric = (req.query.matric || '').trim();
+    const template = (req.query.template || 'm').toLowerCase() === 'p'
+      ? 'phd'
+      : 'msc';
+
+    if (!matric)
+      return res.status(400).json({ status:'error', message:'missing matric' });
 
     const sheets = await getSheetsClientFromEnv();
     const spreadsheetId = process.env.SHEET_ID;
-    if (!spreadsheetId) return res.status(500).json({ status:'error', message:'SHEET_ID missing' });
+    if (!spreadsheetId)
+      return res.status(500).json({ status:'error', message:'SHEET_ID missing' });
 
     const tab = await findExistingTab(sheets, spreadsheetId);
     const rows = await readSheetRows(sheets, spreadsheetId, tab);
-    if (!rows.length) return res.status(500).json({ status:'error', message:'sheet empty' });
+    if (!rows.length)
+      return res.status(500).json({ status:'error', message:'sheet empty' });
 
-    const headers = rows[0].map(h => (h||'').toString().trim());
-    const matricCols = ['Matric','Matric No','MatricNo','StudentID','ID'];
-    let mIdx = headers.findIndex(h => matricCols.includes(h));
-    if (mIdx === -1) mIdx = headers.findIndex(h => /matric/i.test(h));
-    if (mIdx === -1) return res.status(500).json({ status:'error', message:'matric column not found' });
+    const headers = rows[0].map(h => (h || '').trim());
 
-    let rowObj = null;
-    let rowNumber = -1;
+    // Find matric column
+    let mIdx = headers.findIndex(h => ['Matric','Matric No','MatricNo'].includes(h));
+    if (mIdx === -1)
+      mIdx = headers.findIndex(h => /matric/i.test(h));
+
+    if (mIdx === -1)
+      return res.status(500).json({ status:'error', message:'matric column not found' });
+
+    // Find student row
+    let rowIndex = -1;
+    let rowObj = {};
     for (let i = 1; i < rows.length; i++) {
-      const r = rows[i];
-      if ((r[mIdx] || '').toString().trim() === matric.toString()) {
-        rowNumber = i+1;
-        rowObj = {};
-        headers.forEach((h, ci) => (rowObj[h] = r[ci] || ''));
+      if ((rows[i][mIdx] || '').toString().trim() === matric) {
+        rowIndex = i;
+        headers.forEach((h, ci) => rowObj[h] = rows[i][ci] || '');
         break;
       }
     }
-    if (!rowObj) return res.status(404).json({ status:'error', message:'student not found' });
 
+    if (rowIndex === -1)
+      return res.status(404).json({ status:'error', message:'student not found' });
+
+    //
+    // Get Start Date
+    //
     let startDateVal = null;
+    let startIdx = -1;
     for (const k of START_DATE_KEYS) {
-      const idx = headers.findIndex(h => (h||'').toString().trim() === k);
-      if (idx !== -1) { startDateVal = rows[rowNumber-1][idx]; break; }
+      startIdx = headers.findIndex(h => h === k);
+      if (startIdx !== -1) {
+        startDateVal = rows[rowIndex][startIdx];
+        break;
+      }
     }
     if (!startDateVal) {
-      const idx2 = headers.findIndex(h => /start/i.test(h));
-      if (idx2 !== -1) startDateVal = rows[rowNumber-1][idx2];
+      startIdx = headers.findIndex(h => /start/i.test(h));
+      if (startIdx !== -1) startDateVal = rows[rowIndex][startIdx];
     }
 
     const parsedStart = parseDateFlexible(startDateVal) || new Date();
-    const quarterRanges = computeQuartersFromStart(parsedStart, 3);
-    const quarterKeys = quarterRanges.map(q=> q.key);
 
-    const activities = loadActivitiesFromMapping(tmpl);
+    // Create quarter keys
+    const quarters = computeQuartersFromStart(parsedStart, 3);
+    const quarterKeys = quarters.map(q => q.key);
 
-    // Read current values for quarter columns if these columns exist
+    // Load activities
+    const activities = loadActivitiesFromMapping(template);
+
+    //
+    // Quarter values from sheet
+    //
     const values = {};
     quarterKeys.forEach(k => {
-      const idx = headers.findIndex(h => (h||'').toString().trim() === k);
-      values[k] = idx !== -1 ? (rows[rowNumber-1][idx] || '') : '';
+      const colIdx = headers.findIndex(h => h === k);
+      values[k] = colIdx !== -1 ? (rows[rowIndex][colIdx] || '') : '';
     });
 
     const activityObjs = activities.map(act => {
-      const quarterTicks = {};
-      quarterKeys.forEach(k => { quarterTicks[k] = !!values[k]; });
-      return { activity: act, quarterTicks, stageValue: '' };
+      const qTick = {};
+      quarterKeys.forEach(k => qTick[k] = !!values[k]);
+      return { activity: act, quarterTicks: qTick };
     });
 
+    //
+    // Milestones P1,P3,P4,P5
+    //
     const milestones = {};
-    ['P1','P3','P4','P5'].forEach(s => {
-      const possible = [`${s} Submitted`, `${s}Submitted`, `${s}_Submitted`, `${s} Approved`, `${s}Approved`];
-      for (const p of possible) {
-        const idx = headers.findIndex(h => (h||'').toString().trim() === p);
-        if (idx !== -1) { milestones[s] = rows[rowNumber-1][idx] || ''; break; }
+    ['P1','P3','P4','P5'].forEach(stage => {
+      const candidates = [
+        `${stage} Submitted`, `${stage}Submitted`, `${stage}_Submitted`,
+        `${stage} Approved`, `${stage}Approved`
+      ];
+      milestones[stage] = '';
+      for (const c of candidates) {
+        const idx = headers.findIndex(h => h === c);
+        if (idx !== -1) {
+          milestones[stage] = rows[rowIndex][idx] || '';
+          break;
+        }
       }
-      if (!milestones[s]) milestones[s] = '';
     });
-
-    // ---------------------------
-    // AUTO-ADD missing quarter columns (IMPORTANT)
-    // ---------------------------
-    async function ensureQuarterColumns() {
-      const missing = [];
-      quarterKeys.forEach(k => {
-        const idx = headers.findIndex(h => h === k);
-        if (idx === -1) missing.push(k);
-      });
-      if (!missing.length) return;
-
-      const newHeaders = [...headers, ...missing];
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: `${tab}!A1`,
-        valueInputOption: "RAW",
-        resource: { values: [newHeaders] }
-      });
-      console.log("[TIMELINE] Added quarter columns:", missing.join(", "));
-      // update 'headers' in-memory so we can return consistent info
-      headers.push(...missing);
-    }
-
-    await ensureQuarterColumns();
 
     return res.json({
       status: 'ok',
       matric,
-      studentName: rowObj['Student Name'] || rowObj['StudentName'] || rowObj['Name'] || '',
-      lastUpdate: rowObj['Last Update'] || rowObj['Timestamp'] || '',
+      studentName: rowObj['Student Name'] || rowObj['Name'] || '',
+      lastUpdate: rowObj['Last Update'] || '',
       startDate: parsedStart.toISOString(),
-      quarterRanges,
       quarterKeys,
+      quarterRanges: quarters,
       activities: activityObjs,
       milestones,
-      header: headers,
-      rawRow: rowObj
+      header: headers
     });
 
   } catch (err) {
-    console.error('timeline err', err);
-    return res.status(500).json({ status:'error', message: err && err.toString ? err.toString() : String(err) });
+    console.error('GET /timeline error:', err);
+    return res.status(500).json({ status:'error', message: err.toString() });
   }
 });
 
-/* POST /api/update_timeline */
+//
+// ====================================================================
+//  POST /api/update_timeline
+// ====================================================================
+//
 router.post('/update_timeline', async (req, res) => {
   try {
-    const { matric, column, value } = req.body || {};
-    if (!matric || !column) return res.status(400).json({ status:'error', message:'missing params' });
+    const { matric, column, value } = req.body;
+    if (!matric || !column)
+      return res.status(400).json({ status:'error', message:'missing params' });
 
     const sheets = await getSheetsClientFromEnv();
     const spreadsheetId = process.env.SHEET_ID;
-    if (!spreadsheetId) return res.status(500).json({ status:'error', message:'SHEET_ID missing' });
 
     const tab = await findExistingTab(sheets, spreadsheetId);
     const rows = await readSheetRows(sheets, spreadsheetId, tab);
-    if (!rows.length) return res.status(500).json({ status:'error', message:'sheet empty' });
+    const headers = rows[0].map(h => (h || '').trim());
 
-    const headers = rows[0].map(h => (h||'').toString().trim());
-    let colIndex = headers.findIndex(h => h === column);
+    // Ensure column exists
+    let colIdx = headers.findIndex(h => h === column);
 
-    if (colIndex === -1) {
+    if (colIdx === -1) {
       headers.push(column);
       await sheets.spreadsheets.values.update({
         spreadsheetId,
@@ -252,28 +261,28 @@ router.post('/update_timeline', async (req, res) => {
         valueInputOption: 'RAW',
         resource: { values: [headers] }
       });
-      colIndex = headers.length - 1;
+      colIdx = headers.length - 1;
     }
 
-    const matricCols = ['Matric','Matric No','MatricNo','StudentID','ID'];
-    let mIdx = headers.findIndex(h => matricCols.includes(h));
-    if (mIdx === -1) mIdx = headers.findIndex(h => /matric/i.test(h));
-    if (mIdx === -1) return res.status(500).json({ status:'error', message:'matric column not found' });
-
-    let rowNumber = -1;
+    // Find matric row
+    let mIdx = headers.findIndex(h => /matric/i.test(h));
+    let rowNum = -1;
     for (let i = 1; i < rows.length; i++) {
-      if ((rows[i][mIdx] || '').toString().trim() === matric.toString()) { rowNumber = i+1; break; }
+      if ((rows[i][mIdx] || '').toString().trim() === matric)
+        rowNum = i + 1;
     }
-    if (rowNumber === -1) return res.status(404).json({ status:'error', message:'student not found' });
 
-    const colLetter = colToLetter(colIndex);
-    await writeCell(sheets, spreadsheetId, tab, `${colLetter}${rowNumber}`, value || '');
+    if (rowNum === -1)
+      return res.status(404).json({ status:'error', message:'student not found' });
 
-    return res.json({ status:'ok', matric, column, value });
+    const colLetter = colToLetter(colIdx);
+    await writeCell(sheets, spreadsheetId, tab, `${colLetter}${rowNum}`, value || '');
+
+    return res.json({ status:'ok', updated: { matric, column, value } });
 
   } catch (err) {
-    console.error('update_timeline err', err);
-    return res.status(500).json({ status:'error', message: err && err.toString ? err.toString() : String(err) });
+    console.error('POST /update_timeline error:', err);
+    return res.status(500).json({ status:'error', message: err.toString() });
   }
 });
 
