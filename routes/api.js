@@ -29,10 +29,13 @@ router.get("/status", async (req, res) => {
     return res.json({
       matric: student.matric,
       studentName: student.name,
-      programme: student.programme,
-      startDate: student.startDate,
-      timeline: student.timeline,
-      progress: student.progress
+      P1: student.p1Submitted ? "Submitted" : "",
+      P3: student.p3Submitted ? "Submitted" : "",
+      P4: student.p4Submitted ? "Submitted" : "",
+      P5: student.p5Submitted ? "Submitted" : "",
+      overall: student.progress?.percentage
+        ? student.progress.percentage + "%"
+        : "0%"
     });
 
   } catch (err) {
@@ -40,7 +43,6 @@ router.get("/status", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-
 
 /**
  * GET /api/all
