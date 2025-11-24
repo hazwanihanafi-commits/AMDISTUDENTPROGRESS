@@ -4,7 +4,7 @@ import { buildTimeline } from "../helpers/timeline.js";
 import { calcProgress } from "../helpers/progress.js";
 
 /**
- * Authenticate Google Sheets
+ * Google Sheets Auth Helper
  */
 async function getSheetsClient() {
   const auth = new google.auth.GoogleAuth({
@@ -17,40 +17,39 @@ async function getSheetsClient() {
 }
 
 /**
- * Read full MasterTracking sheet and return structured student objects
+ * Read MasterTracking sheet
  */
 export async function readMasterTracking(spreadsheetId) {
   const sheets = await getSheetsClient();
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: "MasterTracking!A1:Z1000"
+    range: "MasterTracking!A1:Z2000"
   });
 
   const rows = res.data.values;
   if (!rows || rows.length < 2) return [];
 
   const header = rows[0].map(h => h.trim());
-  const dataRows = rows.slice(1);
+  const data = rows.slice(1);
 
-  const students = dataRows.map(row => {
+  const students = data.map(row => {
     const obj = {};
 
-    // Build raw object from row
+    // Build row -> object mapping
     header.forEach((col, i) => {
       obj[col] = row[i] || "";
     });
 
-    // Student object
+    // Format student object based on your exact sheet headers
     const student = {
-      matric: obj["Matric"] || obj["Matric No"] || "",
+      matric: obj["Matric"] || "",
       name: obj["Student Name"] || "",
       programme: obj["Programme"] || "",
       startDate: obj["Start Date"] || "",
       supervisorEmail: obj["Main Supervisor's Email"] || "",
       studentEmail: obj["Student's Email"] || "",
 
-      // Submission/approval boolean flags
       p1Submitted: !!obj["P1 Submitted"],
       p1Approved: !!obj["P1 Approved"],
       p3Submitted: !!obj["P3 Submitted"],
@@ -61,18 +60,18 @@ export async function readMasterTracking(spreadsheetId) {
       p5Approved: !!obj["P5 Approved"]
     };
 
-    // Detect MSc vs PhD
+    // Detect programme type
     const isPhD = student.programme.toLowerCase().includes("philosophy");
 
-    // Expected timing (corrected)
+    // Correct durations (you confirmed: PhD = 3 yr, MSc = 2 yr)
     const expectedMonths = isPhD
       ? { P1: 0, P3: 3, P4: 6, P5: 36 }  // PhD = 3 years
       : { P1: 0, P3: 3, P4: 6, P5: 24 }; // MSc = 2 years
 
-    // Build timeline (expected + actual)
+    // Build timeline
     student.timeline = buildTimeline(student, expectedMonths);
 
-    // Progress percentage (0–100%)
+    // Progress percentage from 0–100
     student.progress = calcProgress(student);
 
     return student;
