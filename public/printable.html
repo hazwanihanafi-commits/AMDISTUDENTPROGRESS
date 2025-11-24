@@ -1,146 +1,81 @@
 <!doctype html>
 <html>
 <head>
-  <meta charset="utf-8"/>
-  <title>AMDI Printable Timeline</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <style>
-    body{font-family:Arial;margin:20px;color:#222;}
-    .header{
-      background:#5b2b7b;
-      color:#fff;
-      padding:15px;
-      text-align:center;
-      border-radius:8px;
-      font-size:20px;
-      font-weight:700;
-    }
-    .box{
-      border:1px solid #ccc;
-      padding:12px;
-      border-radius:6px;
-      margin-top:14px;
-      background:#fafafa;
-    }
-    table{
-      width:100%;
-      border-collapse:collapse;
-      margin-top:12px;
-    }
-    th,td{
-      border:1px solid #ccc;
-      padding:10px;
-      text-align:left;
-      font-size:14px;
-    }
-    th{
-      background:#f5e9ff;
-      color:#5b2b7b;
-    }
-    .check{
-      font-size:20px;
-      color:#5b2b7b;
-      text-align:center;
-    }
-    .btn{
-      padding:8px 12px;
-      border:1px solid #5b2b7b;
-      background:#fff;
-      border-radius:6px;
-      cursor:pointer;
-      margin-top:10px;
-    }
-    @media print {
-      .no-print{ display:none; }
-      body{ margin:0; }
-    }
-  </style>
+<meta charset="utf-8"/>
+<title>Printable - AMDI Timeline</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  body{font-family:Arial;margin:0;color:#111}
+  .header{background:#5b2b7b;color:#fff;padding:14px;text-align:center;font-weight:700}
+  .container{max-width:980px;margin:18px auto;padding:18px}
+  .row{display:flex;gap:16px}
+  .left{flex:1}
+  .right{width:260px;background:#f3ecf7;padding:10px;border-radius:8px;text-align:center}
+  .ring{width:180px;height:180px;border-radius:50%;display:grid;place-items:center;margin:10px auto;background:conic-gradient(#5b2b7b 0deg,#eee 0deg)}
+  .core{width:110px;height:110px;border-radius:50%;background:#fff;display:grid;place-items:center}
+  table{width:100%;border-collapse:collapse;margin-top:14px}
+  th,td{border:1px solid #ddd;padding:8px;text-align:left;font-size:13px}
+  th{background:#faf0ff;color:#5b2b7b}
+  @media print { button#print { display:none } }
+  button#print{margin-top:12px;padding:8px 12px;background:#5b2b7b;color:#fff;border:none;border-radius:6px}
+</style>
 </head>
 <body>
+  <div class="header">AMDI STUDENT PROGRESS</div>
+  <div class="container">
+    <div class="row">
+      <div class="left">
+        <div><strong id="name">—</strong></div>
+        <div>Matric: <span id="matricView">—</span></div>
+        <div>Start date: <span id="start">—</span></div>
 
-<div class="header">AMDI STUDENT PROGRESS TIMELINE</div>
+        <table id="tl">
+          <thead><tr><th>Activity</th><th>Expected</th><th>Timeline</th></tr></thead>
+          <tbody></tbody>
+        </table>
 
-<div class="no-print" style="margin-top:16px;">
-  <label>
-    Matric:
-    <input id="mat" style="padding:6px;border-radius:6px;border:1px solid #aaa"/>
-  </label>
-  <button class="btn" onclick="loadTimeline()">Load</button>
-  <button class="btn" onclick="window.print()">Print</button>
-</div>
+        <div style="margin-top:14px">
+          <div>Supervisor signature: __________________________</div>
+          <div style="margin-top:8px">Date: ________________</div>
+        </div>
+      </div>
 
-<div id="content" style="margin-top:16px;"></div>
+      <div class="right">
+        <div style="font-weight:700">Progress</div>
+        <div class="ring" id="ring" style="background:conic-gradient(#5b2b7b 0deg,#eee 0deg)">
+          <div class="core">
+            <div id="pct" style="font-size:28px;font-weight:800;color:#5b2b7b">0%</div>
+            <div style="font-size:12px;color:#666">Completed</div>
+          </div>
+        </div>
+        <button id="print" onclick="window.print()">Print</button>
+      </div>
+    </div>
+  </div>
 
 <script>
-async function loadTimeline(){
-  const m = document.getElementById('mat').value.trim();
-  if(!m) return alert('Please enter matric number.');
-
-  const r = await fetch('/api/status?matric=' + encodeURIComponent(m));
-  const j = await r.json();
-
-  if(j.status !== 'ok'){
-    document.getElementById('content').innerHTML =
-      '<div class="box">Student not found.</div>';
-    return;
-  }
-
-  const tick = s => s ? '<div class="check">✓</div>' : '';
-
-  document.getElementById('content').innerHTML = `
-    <div class="box">
-      <strong>${j.studentName}</strong><br/>
-      Matric: ${j.matric}<br/>
-      Last update: ${j.lastUpdate || '-'}
-    </div>
-
-    <table>
-      <thead>
-        <tr>
-          <th>Activity</th>
-          <th>P1</th>
-          <th>P3</th>
-          <th>P4</th>
-          <th>P5</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Registration & Orientation</td>
-          <td>${tick(j.milestones.P1)}</td>
-          <td></td>
-          <td></td>
-          <td></td>
-        </tr>
-
-        <tr>
-          <td>Mid-Candidature Review</td>
-          <td></td>
-          <td>${tick(j.milestones.P3)}</td>
-          <td></td>
-          <td></td>
-        </tr>
-
-        <tr>
-          <td>Research Implementation II / Publication</td>
-          <td></td>
-          <td></td>
-          <td>${tick(j.milestones.P4)}</td>
-          <td></td>
-        </tr>
-
-        <tr>
-          <td>Thesis / Pre-Submission</td>
-          <td></td>
-          <td></td>
-          <td></td>
-          <td>${tick(j.milestones.P5)}</td>
-        </tr>
-      </tbody>
-    </table>
-  `;
+async function fetchJson(url,opts){ const r=await fetch(url,opts); return await r.json(); }
+async function loadPrintable(){
+  const params = new URLSearchParams(location.search);
+  const m = params.get('matric'); if(!m) return alert('matric missing');
+  const r = await fetchJson(`/api/timeline?matric=${encodeURIComponent(m)}&template=m`);
+  if (r.status !== 'ok') return alert('error: ' + JSON.stringify(r));
+  document.getElementById('name').textContent = r.studentName || '-';
+  document.getElementById('matricView').textContent = r.matric || '-';
+  document.getElementById('start').textContent = new Date(r.startDate).toLocaleDateString();
+  const tb = document.querySelector('#tl tbody'); tb.innerHTML = '';
+  r.activities.forEach(a=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td>${a.activity}</td><td>See portfolio</td><td>${Object.keys(a.quarterTicks).filter(k=>a.quarterTicks[k]).join(', ')}</td>`;
+    tb.appendChild(tr);
+  });
+  const stages = ['P1','P3','P4','P5']; let done=0; stages.forEach(s=>{ if (r.milestones[s]) done++; });
+  const pct = Math.round((done/4)*100);
+  document.getElementById('pct').textContent = pct + '%';
+  const deg = Math.round((pct/100)*360);
+  document.getElementById('ring').style.background = `conic-gradient(#5b2b7b ${deg}deg,#eee ${deg}deg)`;
 }
+loadPrintable();
 </script>
-
 </body>
 </html>
