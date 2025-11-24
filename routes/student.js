@@ -1,7 +1,6 @@
 // routes/student.js
 import express from "express";
 import { readMasterTracking } from "../services/googleSheets.js";
-import { computeTimeline } from "../helpers/computeTimeline.js";
 
 const router = express.Router();
 
@@ -19,15 +18,17 @@ router.get("/:matric", async (req, res, next) => {
       return res.status(404).send("Student not found");
     }
 
-    // Compute additional timeline (actual submission dates)
-    const timelineExtra = computeTimeline(student);
+    // IMPORTANT:
+    // Do NOT compute timeline again.
+    // readMasterTracking already produced:
+    // student.timeline = { quarters, milestones, status }
 
-    // Pass timelineExtra + student.timeline (expected timeline)
     res.render("student", {
       student,
-      timeline: timelineExtra,
-      imagePath: "/assets/timeline.png",
+      timeline: student.timeline, // correct!
+      imagePath: "/assets/timeline.png", // optional
     });
+
   } catch (err) {
     console.error("Error in /student route:", err);
     next(err);
