@@ -2,6 +2,7 @@
 import express from 'express';
 import { google } from 'googleapis';
 import fs from 'fs';
+import { getSheetsClientFromEnv, findExistingTab, readSheetRows, writeCell } from './_helpers/googleSheets.js';
 
 const router = express.Router();
 
