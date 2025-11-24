@@ -5,7 +5,7 @@ import studentRouter from "./routes/student.js";
 
 const app = express();
 
-// view engine setup
+// View engine
 app.set("views", "./views");
 app.set("view engine", "ejs");
 
@@ -16,17 +16,16 @@ app.use(express.static("public"));
 // ROUTES
 app.use("/", indexRouter);
 app.use("/api", apiRouter);
-
-// ADD THIS
-app.use("/student", studentRouter);
+app.use("/student", studentRouter);   // <-- ONLY ONCE
 
 // 404 handler
 app.use((req, res, next) => {
-  next(createError(404));
+  res.status(404).send("Page Not Found");
 });
 
-// error handler
+// Error handler
 app.use((err, req, res, next) => {
+  console.error("ERROR:", err);
   res.status(err.status || 500);
   res.render("error");
 });
