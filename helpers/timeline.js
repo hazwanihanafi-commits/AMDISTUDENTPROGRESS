@@ -1,62 +1,70 @@
-// helpers/timeline.js
-'use strict';
-const MS_PER_DAY = 24*60*60*1000;
-
-/**
- * Convert JS Date -> YxQy relative to startDate
- */
-function quarterLabelForDate(startDate, date) {
-  const start = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-  const d = new Date(date.getFullYear(), date.getMonth(), 1);
-  const monthsDiff = (d.getFullYear() - start.getFullYear())*12 + (d.getMonth() - start.getMonth());
-  const year = Math.floor(monthsDiff / 12) + 1;
-  const quarter = Math.floor((d.getMonth())/3) + 1; // quarter of calendar month
-  return `Y${year}Q${quarter}`;
-}
-
-/**
- * Generate an array of quarter labels from startDate, for nMonths (inclusive).
- * e.g., nMonths=36 -> array of quarters across 3 years.
- */
-function generateQuarters(startDate, nMonths) {
-  const q = [];
-  for (let m=0; m<nMonths; m+=3) {
-    const d = new Date(startDate.getFullYear(), startDate.getMonth()+m, 1);
-    q.push(quarterLabelForDate(startDate, d));
-  }
-  // remove duplicates and keep order
-  return Array.from(new Set(q));
-}
-
-/**
- * Given student object and milestone months map, return timeline object:
- * milestones = { P1:0, P3:3, P4:6, P5:24 } (for PhD)
- * If programme === "Doctor of Philosophy", use 36 total months by default
- */
-function buildTimeline(student, milestones = {P1:0,P3:3,P4:6,P5:24}) {
+function buildTimeline(student, expectedMonths) {
   const start = new Date(student.startDate);
-  const totalMonths = (student.programme && student.programme.toLowerCase().includes('philosophy')) ? 36 : 24;
-  const quarters = generateQuarters(start, totalMonths);
-  const expected = {};
-  Object.entries(milestones).forEach(([k, months]) => {
-    const d = new Date(start.getFullYear(), start.getMonth()+months, 1);
-    expected[k] = quarterLabelForDate(start, d);
-  });
-  // For rendering, create an array of objects for each milestone containing expectedQuarter & actual status
-  const milestonesArr = Object.keys(milestones).map(k => {
+  if (isNaN(start)) {
     return {
-      id: k,
-      expectedQuarter: expected[k],
-      submitted: !!student[`p${k.slice(1)}Submitted`],
-      approved: !!student[`p${k.slice(1)}Approved`]
+      quarters: [],
+      milestones: [],
+      status: "Invalid Start Date"
     };
-  });
+  }
 
-  return {
-    quarters,
-    milestones: milestonesArr,
-    totalMonths
-  };
+  // Generate quarters (max 12 for PhD, 8 for MSc)
+  const totalMonths = expectedMonths.P5;
+  const totalQuarters = Math.ceil(totalMonths / 3);
+
+  const quarters = [];
+  for (let i = 0; i < totalQuarters; i++) {
+    const year = Math.floor(i / 4) + 1;
+    const q = (i % 4) + 1;
+    quarters.push(`Y${year}Q${q}`);
+  }
+
+  // Convert expected months → expected quarter
+  function monthToQuarter(m) {
+    const idx = Math.floor(m / 3);
+    return quarters[idx] || quarters[quarters.length - 1];
+  }
+
+  // Build milestone objects
+  const milestones = [
+    {
+      id: "P1",
+      expectedQuarter: monthToQuarter(expectedMonths.P1),
+      submitted: student.p1Submitted,
+      approved: student.p1Approved
+    },
+    {
+      id: "P3",
+      expectedQuarter: monthToQuarter(expectedMonths.P3),
+      submitted: student.p3Submitted,
+      approved: student.p3Approved
+    },
+    {
+      id: "P4",
+      expectedQuarter: monthToQuarter(expectedMonths.P4),
+      submitted: student.p4Submitted,
+      approved: student.p4Approved
+    },
+    {
+      id: "P5",
+      expectedQuarter: monthToQuarter(expectedMonths.P5),
+      submitted: student.p5Submitted,
+      approved: student.p5Approved
+    }
+  ];
+
+  // Determine status
+  const today = new Date();
+  const monthsDiff =
+    (today.getFullYear() - start.getFullYear()) * 12 +
+    (today.getMonth() - start.getMonth());
+
+  let status = "On Track";
+  if (student.p5Approved) status = "Completed";
+  else if (monthsDiff > expectedMonths.P5) status = "Overduration";
+  else if (monthsDiff > expectedMonths.P5 - 3) status = "Warning";
+
+  return { quarters, milestones, status };
 }
 
-module.exports = { quarterLabelForDate, generateQuarters, buildTimeline };
+module.exports = { buildTimeline };
