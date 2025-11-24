@@ -1,114 +1,70 @@
-// services/googleSheets.js
-import { google } from "googleapis";
-import { calcProgress } from "../helpers/progress.js";
-import { buildTimeline } from "../helpers/timeline.js";
-
-// Authenticate Google Sheets
-async function getSheetsClient() {
-  const auth = new google.auth.GoogleAuth({
-    credentials: JSON.parse(process.env.GOOGLE_SERVICE_KEY),
-    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
-  });
-
-  const client = await auth.getClient();
-  return google.sheets({ version: "v4", auth: client });
-}
-
-/* -------------------------------------------------------
-   BASIC READ FUNCTION (used in many parts of your app)
-------------------------------------------------------- */
-export async function readRange(spreadsheetId, range) {
-  const sheets = await getSheetsClient();
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range,
-  });
-  return res.data.values || [];
-}
-
-/* -------------------------------------------------------
-   BASIC WRITE FUNCTION
-------------------------------------------------------- */
-export async function writeRange(spreadsheetId, range, values, options = {}) {
-  const sheets = await getSheetsClient();
-
-  if (options.appendRow) {
-    const res = await sheets.spreadsheets.values.append({
-      spreadsheetId,
-      range,
-      valueInputOption: "RAW",
-      insertDataOption: "INSERT_ROWS",
-      requestBody: { values: options.values }
-    });
-    return res.data;
+function buildTimeline(student, expectedMonths) {
+  const start = new Date(student.startDate);
+  if (isNaN(start)) {
+    return {
+      quarters: [],
+      milestones: [],
+      status: "Invalid Start Date"
+    };
   }
 
-  const res = await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range,
-    valueInputOption: "RAW",
-    requestBody: { values },
-  });
+  // Generate quarters
+  const totalMonths = expectedMonths.P5;
+  const totalQuarters = Math.ceil(totalMonths / 3);
 
-  return res.data;
+  const quarters = [];
+  for (let i = 0; i < totalQuarters; i++) {
+    const year = Math.floor(i / 4) + 1;
+    const q = (i % 4) + 1;
+    quarters.push(`Y${year}Q${q}`);
+  }
+
+  // Convert expected month → quarter
+  function monthToQuarter(m) {
+    const index = Math.floor(m / 3);
+    return quarters[index] || quarters[quarters.length - 1];
+  }
+
+  // Milestones table
+  const milestones = [
+    {
+      id: "P1",
+      expectedQuarter: monthToQuarter(expectedMonths.P1),
+      submitted: student.p1Submitted,
+      approved: student.p1Approved
+    },
+    {
+      id: "P3",
+      expectedQuarter: monthToQuarter(expectedMonths.P3),
+      submitted: student.p3Submitted,
+      approved: student.p3Approved
+    },
+    {
+      id: "P4",
+      expectedQuarter: monthToQuarter(expectedMonths.P4),
+      submitted: student.p4Submitted,
+      approved: student.p4Approved
+    },
+    {
+      id: "P5",
+      expectedQuarter: monthToQuarter(expectedMonths.P5),
+      submitted: student.p5Submitted,
+      approved: student.p5Approved
+    }
+  ];
+
+  // Determine status
+  const today = new Date();
+  const monthsDiff =
+    (today.getFullYear() - start.getFullYear()) * 12 +
+    (today.getMonth() - start.getMonth());
+
+  let status = "On Track";
+  if (student.p5Approved) status = "Completed";
+  else if (monthsDiff > expectedMonths.P5) status = "Overduration";
+  else if (monthsDiff > expectedMonths.P5 - 3) status = "Warning";
+
+  return { quarters, milestones, status };
 }
 
-/* -------------------------------------------------------
-   READ MASTER TRACKING (the important one)
-------------------------------------------------------- */
-export async function readMasterTracking(spreadsheetId, range = "MasterTracking!A1:Z1000") {
-  const sheets = await getSheetsClient();
-
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId,
-    range,
-  });
-
-  const rows = res.data.values || [];
-  if (!rows.length) return [];
-
-  const header = rows[0].map((h) => h.trim());
-  const data = rows.slice(1).map((r) => {
-    const obj = {};
-    header.forEach((h, i) => {
-      obj[h] = r[i] || "";
-    });
-    return obj;
-  });
-
-  const students = data.map((row) => {
-    const s = {
-      matric: row["Matric"] || row["Matric No"] || "",
-      name: row["Student Name"] || row["Name"] || "",
-      programme: row["Programme"] || "",
-      startDate: row["Start Date"] || row["StartDate"] || "",
-      // Submitted/Approved
-      p1Submitted: !!row["P1 Submitted"],
-      p1Approved: !!row["P1 Approved"],
-      p3Submitted: !!row["P3 Submitted"],
-      p3Approved: !!row["P3 Approved"],
-      p4Submitted: !!row["P4 Submitted"],
-      p4Approved: !!row["P4 Approved"],
-      p5Submitted: !!row["P5 Submitted"],
-      p5Approved: !!row["P5 Approved"],
-      supervisorEmail: row["Main Supervisor's Email"] || row["Supervisor Email"] || "",
-      studentEmail: row["Student's Email"] || row["Student Email"] || "",
-    };
-
-    // Calculate progress
-    s.progress = calcProgress(s);
-
-    // Build timeline
-    const isPhD = s.programme.toLowerCase().includes("philosophy");
-    s.timeline = buildTimeline(s, {
-      P1: 0,
-      P3: 3,
-      P4: 6,
-      P5: isPhD ? 24 : 12,
-    });
-
-    return s;
-  });
-
-  return students;
-}
+module.exports = { buildTimeline };
