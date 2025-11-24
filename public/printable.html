@@ -1,81 +1,85 @@
 <!doctype html>
 <html>
 <head>
-<meta charset="utf-8"/>
-<title>Printable - AMDI Timeline</title>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<style>
-  body{font-family:Arial;margin:0;color:#111}
-  .header{background:#5b2b7b;color:#fff;padding:14px;text-align:center;font-weight:700}
-  .container{max-width:980px;margin:18px auto;padding:18px}
-  .row{display:flex;gap:16px}
-  .left{flex:1}
-  .right{width:260px;background:#f3ecf7;padding:10px;border-radius:8px;text-align:center}
-  .ring{width:180px;height:180px;border-radius:50%;display:grid;place-items:center;margin:10px auto;background:conic-gradient(#5b2b7b 0deg,#eee 0deg)}
-  .core{width:110px;height:110px;border-radius:50%;background:#fff;display:grid;place-items:center}
-  table{width:100%;border-collapse:collapse;margin-top:14px}
-  th,td{border:1px solid #ddd;padding:8px;text-align:left;font-size:13px}
-  th{background:#faf0ff;color:#5b2b7b}
-  @media print { button#print { display:none } }
-  button#print{margin-top:12px;padding:8px 12px;background:#5b2b7b;color:#fff;border:none;border-radius:6px}
-</style>
+  <meta charset="utf-8" />
+  <title>Printable - AMDI Student Progress</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="/css/printable.css">
 </head>
 <body>
-  <div class="header">AMDI STUDENT PROGRESS</div>
-  <div class="container">
-    <div class="row">
-      <div class="left">
-        <div><strong id="name">—</strong></div>
-        <div>Matric: <span id="matricView">—</span></div>
-        <div>Start date: <span id="start">—</span></div>
+  <header class="print-header">
+    <div class="brand">AMDI STUDENT PROGRESS</div>
+  </header>
 
-        <table id="tl">
-          <thead><tr><th>Activity</th><th>Expected</th><th>Timeline</th></tr></thead>
-          <tbody></tbody>
-        </table>
-
-        <div style="margin-top:14px">
-          <div>Supervisor signature: __________________________</div>
-          <div style="margin-top:8px">Date: ________________</div>
-        </div>
+  <main class="print-wrap">
+    <section class="left">
+      <div class="student-meta">
+        <div><strong>Name:</strong> <span id="name">—</span></div>
+        <div><strong>Matric:</strong> <span id="matric">—</span></div>
+        <div><strong>Start date:</strong> <span id="start">—</span></div>
       </div>
 
-      <div class="right">
-        <div style="font-weight:700">Progress</div>
-        <div class="ring" id="ring" style="background:conic-gradient(#5b2b7b 0deg,#eee 0deg)">
-          <div class="core">
-            <div id="pct" style="font-size:28px;font-weight:800;color:#5b2b7b">0%</div>
-            <div style="font-size:12px;color:#666">Completed</div>
-          </div>
-        </div>
-        <button id="print" onclick="window.print()">Print</button>
+      <table class="timeline-table">
+        <thead><tr><th>Activity</th><th>Expected</th><th>Timeline</th></tr></thead>
+        <tbody id="activityRows"></tbody>
+      </table>
+
+      <div class="sign-block">
+        <div>Supervisor signature: ______________________________</div>
+        <div>Date: __________________</div>
       </div>
-    </div>
-  </div>
+    </section>
+
+    <aside class="right">
+      <div class="progress-card">
+        <h3>Progress</h3>
+        <div id="ring" class="ring"></div>
+        <div id="pct" class="pct">0%</div>
+        <div style="margin-top:18px">
+          <button id="doPrint">Print</button>
+        </div>
+      </div>
+    </aside>
+  </main>
 
 <script>
-async function fetchJson(url,opts){ const r=await fetch(url,opts); return await r.json(); }
-async function loadPrintable(){
-  const params = new URLSearchParams(location.search);
-  const m = params.get('matric'); if(!m) return alert('matric missing');
-  const r = await fetchJson(`/api/timeline?matric=${encodeURIComponent(m)}&template=m`);
-  if (r.status !== 'ok') return alert('error: ' + JSON.stringify(r));
-  document.getElementById('name').textContent = r.studentName || '-';
-  document.getElementById('matricView').textContent = r.matric || '-';
-  document.getElementById('start').textContent = new Date(r.startDate).toLocaleDateString();
-  const tb = document.querySelector('#tl tbody'); tb.innerHTML = '';
-  r.activities.forEach(a=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML = `<td>${a.activity}</td><td>See portfolio</td><td>${Object.keys(a.quarterTicks).filter(k=>a.quarterTicks[k]).join(', ')}</td>`;
-    tb.appendChild(tr);
-  });
-  const stages = ['P1','P3','P4','P5']; let done=0; stages.forEach(s=>{ if (r.milestones[s]) done++; });
-  const pct = Math.round((done/4)*100);
+async function fetchJson(url){ const r = await fetch(url); return await r.json(); }
+function qs(name){ const u = new URL(location.href); return u.searchParams.get(name); }
+
+function setRing(pct){
+  const deg = Math.round((pct/100) * 360);
+  document.getElementById('ring').style.background = `conic-gradient(#ffd600 ${deg}deg,#eee ${deg}deg)`;
   document.getElementById('pct').textContent = pct + '%';
-  const deg = Math.round((pct/100)*360);
-  document.getElementById('ring').style.background = `conic-gradient(#5b2b7b ${deg}deg,#eee ${deg}deg)`;
 }
-loadPrintable();
+
+async function loadPrintable(){
+  const m = qs('matric');
+  if(!m) { alert('missing matric'); return; }
+  const j = await fetchJson('/api/timeline?matric=' + encodeURIComponent(m) + '&template=m');
+  if(!j || j.status !== 'ok'){ alert('Student not found'); return; }
+  document.getElementById('name').textContent = j.studentName || '—';
+  document.getElementById('matric').textContent = j.matric || '—';
+  document.getElementById('start').textContent = (new Date(j.startDate)).toLocaleDateString();
+
+  // Build activity rows
+  const tbody = document.getElementById('activityRows'); tbody.innerHTML = '';
+  (j.activities || []).forEach(a => {
+    const tr = document.createElement('tr');
+    const timeline = Object.keys(a.quarterTicks || {}).filter(k => a.quarterTicks[k]).join(', ');
+    tr.innerHTML = `<td>${a.activity}</td><td></td><td>${timeline}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // progress from milestones
+  const mks = j.milestones || {};
+  let done = 0;
+  ['P1','P3','P4','P5'].forEach(s => { if (mks[s] && String(mks[s]).trim()!=='') done++; });
+  const pct = Math.round((done/4)*100);
+  setRing(pct);
+}
+
+document.getElementById('doPrint')?.addEventListener('click', ()=> window.print());
+window.addEventListener('DOMContentLoaded', loadPrintable);
 </script>
 </body>
 </html>
