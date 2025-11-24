@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title><%= student.name %> — Progress</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- ECharts -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+
+  <!-- Inline CSS (Theme C: Blue Professional) -->
+  <style>
+    :root{
+      --navy:#0d47a1;
+      --cyan:#00bcd4;
+      --muted:#f4f6f9;
+      --card-bg: #ffffff;
+      --accent:#1976d2;
+      --success:#2ecc71;
+      --warning:#f1c40f;
+      --danger:#e74c3c;
+      --soft-shadow: 0 6px 18px rgba(13,71,161,0.08);
+      --glass: linear-gradient(180deg, rgba(13,71,161,0.06), rgba(13,71,161,0.02));
+    }
+    body{ font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background: #f0f3f8; margin:0; color:#222;}
+    .container{ max-width:1200px; margin:28px auto; padding:18px;}
+    .topbar{ display:flex; align-items:center; gap:16px; margin-bottom:18px;}
+    .logo { width:56px; height:56px; border-radius:8px; overflow:hidden; box-shadow:var(--soft-shadow); border:1px solid rgba(0,0,0,0.04); }
+    .title { font-size:20px; color:var(--navy); font-weight:700; }
+    .sub { color:#556; font-size:13px; }
+
+    .grid { display:grid; grid-template-columns: 360px 1fr; gap:18px; align-items:start; }
+
+    /* Student card */
+    .card { background:var(--card-bg); border-radius:12px; padding:18px; box-shadow:var(--soft-shadow); }
+    .student-card { border-left:6px solid var(--accent); display:flex; gap:12px; align-items:center; }
+    .avatar { width:72px; height:72px; border-radius:10px; background: linear-gradient(135deg,var(--navy),var(--accent)); color:white; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:22px; }
+    .student-meta h2{ margin:0; font-size:20px; color:var(--navy); }
+    .student-meta p{ margin:2px 0 0 0; color:#555; font-size:14px; }
+
+    .meta-list{ margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; }
+    .badge { padding:6px 10px; border-radius:8px; font-weight:600; font-size:13px; color:#fff; background:var(--accent); }
+
+    /* Charts area */
+    .charts { display:flex; gap:16px; align-items:flex-start; margin-top:12px; }
+    #donut { width:320px; height:320px; background:linear-gradient(180deg,#ffffff,#fbfdff); border-radius:12px; box-shadow:var(--soft-shadow); padding:8px; }
+    .right-pane { flex:1; display:flex; flex-direction:column; gap:12px; }
+
+    /* Milestone table */
+    table { width:100%; border-collapse:collapse; background:var(--card-bg); border-radius:8px; overflow:hidden; box-shadow:var(--soft-shadow); }
+    thead th { text-align:left; padding:12px 14px; background: linear-gradient(90deg, rgba(13,71,161,0.06), rgba(0,188,212,0.02)); color:var(--navy); font-weight:700; }
+    tbody td { padding:12px 14px; border-top:1px solid #f0f2f6; color:#333; font-size:14px; }
+    .status-pill { display:inline-block; padding:6px 10px; border-radius:999px; font-weight:700; font-size:13px; color:#fff; }
+    .status-on { background:var(--success); }
+    .status-sub { background:var(--warning); color:#222; }
+    .status-pend { background:#9aa7c7; }
+
+    /* Timeline chart box */
+    .timeline-box { margin-top:12px; background:var(--card-bg); padding:14px; border-radius:12px; box-shadow:var(--soft-shadow); }
+    #timelineChart { height:240px; width:100%; }
+
+    /* Legend */
+    .legend { display:flex; gap:10px; align-items:center; margin-top:8px; flex-wrap:wrap;}
+    .legend .item { display:flex; gap:8px; align-items:center; font-size:13px; color:#444; }
+    .swatch { width:14px; height:14px; border-radius:3px; display:inline-block; }
+
+    /* footer controls */
+    .controls { display:flex; justify-content:space-between; align-items:center; margin-top:12px; }
+    .btn { padding:8px 12px; border-radius:8px; border:0; background:var(--navy); color:white; font-weight:700; cursor:pointer; }
+    .muted { color:#667; font-size:13px; }
+
+    @media (max-width:980px){
+      .grid { grid-template-columns: 1fr; }
+      #donut { width:100%; height:260px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- top -->
+    <div class="topbar">
+      <div class="logo">
+        <!-- small logo icon (not a banner) -->
+        <img src="<%= '/mnt/data/55967c05-4c3d-4b29-9837-2300162bc3bf.png' %>" alt="logo" style="width:100%;height:100%;object-fit:cover"/>
+      </div>
+      <div>
+        <div class="title">AMDI Student Progress</div>
+        <div class="sub">Student detail — <%= student.matric %> · <%= student.programme %></div>
+      </div>
+      <div style="margin-left:auto; text-align:right;">
+        <a href="/" class="btn" style="background:transparent;color:var(--navy);border:2px solid var(--navy);">← Back to Dashboard</a>
+      </div>
+    </div>
+
+    <div class="grid">
+
+      <!-- left column: student card + donut -->
+      <div>
+        <div class="card student-card">
+          <div class="avatar"><%= student.name.split(' ').map(n=>n[0]).slice(0,2).join('') %></div>
+          <div class="student-meta" style="flex:1">
+            <h2><%= student.name %></h2>
+            <p><strong>Matric:</strong> <%= student.matric %> &nbsp; | &nbsp; <strong>Program:</strong> <%= student.programme %></p>
+            <div class="meta-list">
+              <span class="badge"><strong>Status:</strong> <%= (timeline && timeline.status) ? timeline.status : student.progress.level %></span>
+              <span class="muted">Supervisor: <%= student.supervisorEmail || '—' %></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Donut -->
+        <div id="donut" style="margin-top:14px;">
+          <div id="donutChart" style="width:100%;height:100%;"></div>
+        </div>
+
+        <div style="margin-top:10px; text-align:center; font-weight:700; color:var(--navy)">
+          Overall progress: <span style="font-size:20px;"><%= student.progress.percentage %>%</span>
+        </div>
+      </div>
+
+      <!-- right column: milestone table + timeline -->
+      <div class="right-pane">
+        <!-- milestone table -->
+        <div class="card">
+          <h3 style="margin:0 0 8px 0; color:var(--navy)">Milestones (P1 → P5)</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Milestone</th>
+                <th>Expected (Quarter)</th>
+                <th style="width:110px">Submitted</th>
+                <th style="width:110px">Approved</th>
+                <th style="width:110px">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% student.timeline.milestones.forEach(function(m){ %>
+                <tr>
+                  <td><strong><%= m.id %></strong></td>
+                  <td><%= m.expectedQuarter %></td>
+                  <td><%= m.submitted ? '✓' : '' %></td>
+                  <td><%= m.approved ? '✓' : '' %></td>
+                  <td>
+                    <% if (m.approved) { %>
+                      <span class="status-pill status-on">Approved</span>
+                    <% } else if (m.submitted) { %>
+                      <span class="status-pill status-sub">Submitted</span>
+                    <% } else { %>
+                      <span class="status-pill status-pend">Pending</span>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+            <div class="legend">
+              <div class="item"><span class="swatch" style="background:var(--success)"></span> Approved</div>
+              <div class="item"><span class="swatch" style="background:var(--warning)"></span> Submitted</div>
+              <div class="item"><span class="swatch" style="background:#bdc3c7"></span> Pending</div>
+            </div>
+            <div class="muted">Start date: <strong><%= student.startDate %></strong></div>
+          </div>
+        </div>
+
+        <!-- timeline chart -->
+        <div class="timeline-box">
+          <h4 style="margin:0 0 8px 0; color:var(--navy)">Expected vs Actual Timeline</h4>
+          <div id="timelineChart"></div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+            <div class="legend">
+              <div class="item"><span class="swatch" style="background:#bdc3c7"></span> Expected slot</div>
+              <div class="item"><span class="swatch" style="background:var(--warning)"></span> Submitted</div>
+              <div class="item"><span class="swatch" style="background:var(--success)"></span> Approved</div>
+            </div>
+            <div class="muted">Timeline covers quarters from <strong><%= student.timeline.quarters[0] %></strong> to <strong><%= student.timeline.quarters[student.timeline.quarters.length-1] %></strong></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ECharts render scripts -->
+  <script>
+    // data passed from server
+    const student = <%- JSON.stringify(student) %>;
+    const timeline = <%- JSON.stringify(timeline || student.timeline) %>;
+
+    // ---------- DONUT ----------
+    (function(){
+      const dom = document.getElementById('donutChart');
+      const chart = echarts.init(dom);
+      const pct = student.progress.percentage || 0;
+
+      const option = {
+        title: {
+          text: pct + '%',
+          left: 'center',
+          top: '42%',
+          textStyle: { fontSize: 24, color: '#0d47a1', fontWeight:800 }
+        },
+        tooltip: { show:false },
+        series: [
+          {
+            type: 'pie',
+            radius: ['60%','85%'],
+            avoidLabelOverlap: false,
+            label: { show:false },
+            hoverAnimation: false,
+            data: [
+              { value: pct, name: 'Completed', itemStyle: { color: 'rgba(13,71,161,0.95)' } },
+              { value: 100 - pct, name: 'Remaining', itemStyle: { color: 'rgba(13,71,161,0.12)' } }
+            ]
+          }
+        ]
+      };
+
+      chart.setOption(option);
+      window.addEventListener('resize', ()=> chart.resize());
+    })();
+
+    // ---------- TIMELINE (horizontal lanes) ----------
+    (function(){
+      const dom = document.getElementById('timelineChart');
+      const chart = echarts.init(dom);
+
+      const quarters = timeline.quarters; // e.g., ["Y1Q1","Y1Q2",...]
+      const milestones = timeline.milestones; // array of {id, expectedQuarter, submitted, approved}
+
+      // Build series: expected slot = thin background, submitted/approved overlay
+      const expectedSeries = milestones.map((m, idx) => {
+        const data = quarters.map(q => q === m.expectedQuarter ? 1 : 0);
+        return {
+          name: m.id + ' (expected)',
+          type: 'bar',
+          stack: 'expected' + idx,
+          data,
+          barWidth: 18,
+          itemStyle: { color: '#bdc3c7' },
+          emphasis: { itemStyle: { color:'#9aa7c7' } }
+        };
+      });
+
+      const submittedSeries = milestones.map((m, idx) => {
+        const data = quarters.map(q => (m.submitted && q === m.expectedQuarter) ? 1 : 0 );
+        return {
+          name: m.id + ' (submitted)',
+          type: 'bar',
+          stack: 'submitted' + idx,
+          data,
+          barWidth: 18,
+          itemStyle: { color: '#f1c40f' },
+        };
+      });
+
+      const approvedSeries = milestones.map((m, idx) => {
+        const data = quarters.map(q => (m.approved && q === m.expectedQuarter) ? 1 : 0 );
+        return {
+          name: m.id + ' (approved)',
+          type: 'bar',
+          stack: 'approved' + idx,
+          data,
+          barWidth: 18,
+          itemStyle: { color: '#2ecc71' },
+        };
+      });
+
+      // concat series such that expected sits at bottom, then submitted, then approved overlays
+      const series = [];
+      for (let i=0;i<milestones.length;i++){
+        series.push(expectedSeries[i]);
+        series.push(submittedSeries[i]);
+        series.push(approvedSeries[i]);
+      }
+
+      const option = {
+        legend: { data: series.map(s=>s.name), top: 0 },
+        tooltip: { show:true },
+        grid: { left: '3%', right:'6%', bottom:'3%', containLabel:true },
+        xAxis: { type:'category', data: quarters, axisLabel: { rotate: 0, fontSize:12 } },
+        yAxis: { show:false },
+        series
+      };
+
+      chart.setOption(option);
+      window.addEventListener('resize', ()=> chart.resize());
+    })();
+  </script>
+</body>
+</html>
