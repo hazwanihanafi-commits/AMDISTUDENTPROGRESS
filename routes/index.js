@@ -1,42 +1,39 @@
-// routes/index.js (update)
-const express = require('express');
-const router = express.Router();
-const { getAuthClient } = require('../services/googleAuth'); // your auth helper
-const { readMasterTracking } = require('../services/googleSheets');
+import express from "express";
+import { getAuthClient } from "../services/googleAuth.js";
+import { readMasterTracking } from "../services/googleSheets.js";
 
-router.get('/', async (req, res, next) => {
+const router = express.Router();
+
+// Landing page → Login
+router.get("/", (req, res) => {
+  res.redirect("/login");
+});
+
+// Login page (GET)
+router.get("/login", (req, res) => {
+  res.render("login");
+});
+
+// Login action (POST)
+router.post("/login", (req, res) => {
+  // Temporary: no password check
+  res.redirect("/dashboard");
+});
+
+// Dashboard page
+router.get("/dashboard", async (req, res, next) => {
   try {
     const auth = await getAuthClient();
     const students = await readMasterTracking(auth, process.env.SHEET_ID);
-    // compute summary for donut
-    const totalPct = students.length ? Math.round(students.reduce((s,st)=> s + st.progress.percentage, 0) / students.length) : 0;
-    // overdue logic: expected quarter -> convert to date and compare to today
-    // simple overdue: expected months for each milestone and not submitted nor approved -> overdue
-    const overdueList = [];
-    const now = new Date();
-    students.forEach(st => {
-      const milestones = [
-        { id:'P1', months:0 },
-        { id:'P3', months:3 },
-        { id:'P4', months:6 },
-        { id:'P5', months: st.programme && st.programme.toLowerCase().includes('philosophy') ? 24 : 12 }
-      ];
-      milestones.forEach(m => {
-        const expectedDate = new Date(new Date(st.startDate).getFullYear(), new Date(st.startDate).getMonth()+m.months, 1);
-        const keySubmitted = `p${m.id.slice(1)}Submitted`;
-        const keyApproved = `p${m.id.slice(1)}Approved`;
-        if (!st[keySubmitted] && !st[keyApproved] && expectedDate < now) {
-          overdueList.push({
-            matric: st.matric, name: st.name, milestone: m.id, expectedDate
-          });
-        }
-      });
-    });
 
-    res.render('index', { students, totalPct, overdueList, imagePath: '/assets/timeline.png' });
+    const totalPct = students.length
+      ? Math.round(students.reduce((s, st) => s + st.progress.percentage, 0) / students.length)
+      : 0;
+
+    res.render("index", { students, totalPct });
   } catch (err) {
     next(err);
   }
 });
 
-module.exports = router;
+export default router;
