@@ -1,0 +1,82 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"/><title>Supervisor Timeline</title>
+<style>
+  body{font-family:Arial;padding:12px}
+  input,select,button{padding:8px;border-radius:6px;border:1px solid #ccc}
+  button.primary{background:#5b2b7b;color:#fff;border:none}
+</style>
+</head>
+<body>
+<h2>Supervisor Timeline (Edit)</h2>
+<div>
+  <input id="mat" placeholder="matric" />
+  <select id="template"><option value="m">MSc</option><option value="p">PhD</option></select>
+  <input id="svpass" placeholder="supervisor pass" type="password"/>
+  <button class="primary" onclick="loadStudent()">Load</button>
+  <button onclick="applyUpdates()">Save changes</button>
+</div>
+<div id="timelineWrap"></div>
+
+<script>
+async function fetchJson(url, opts){ const r = await fetch(url, opts); return await r.json(); }
+let current = null;
+
+async function loadStudent(){
+  const m = document.getElementById('mat').value.trim();
+  if(!m) return alert('enter matric');
+  const t = document.getElementById('template').value;
+  const j = await fetchJson(`/api/timeline?matric=${encodeURIComponent(m)}&template=${t}`);
+  if(j.status!=='ok') return alert('not found');
+  current = j;
+  renderEditable(j);
+}
+
+function renderEditable(j){
+  const wrap = document.getElementById('timelineWrap'); wrap.innerHTML = '';
+  const table = document.createElement('table'); table.style.width='100%'; table.border=1;
+  const thead = document.createElement('thead'); thead.innerHTML = '<tr><th>Activity</th><th>Quarter ticks</th></tr>';
+  table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  j.activities.forEach((a,ri)=>{
+    const tr = document.createElement('tr');
+    const td1 = document.createElement('td'); td1.textContent = a.activity;
+    const td2 = document.createElement('td');
+    // for each quarterkey in response, create checkbox
+    const keys = j.quarterKeys && j.quarterKeys.length ? j.quarterKeys : ['P1','P3','P4','P5'];
+    keys.forEach(k=>{
+      const id = `cb_${ri}_${k}`;
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.id=id; cb.dataset.key=k;
+      // mark if value true
+      if(a.quarterTicks && a.quarterTicks[k]) cb.checked = true;
+      const lbl = document.createElement('label'); lbl.htmlFor=id; lbl.style.marginRight='8px'; lbl.textContent = k;
+      td2.appendChild(cb); td2.appendChild(lbl);
+    });
+    tr.appendChild(td1); tr.appendChild(td2); tbody.appendChild(tr);
+  });
+  table.appendChild(tbody); wrap.appendChild(table);
+}
+
+async function applyUpdates(){
+  if(!current) return alert('Load student first');
+  const matric = current.matric;
+  const rows = [];
+  // collect updates by mapping checkboxes to column names. We'll send columnName = header guessed from response.quarterKeys
+  const keys = current.quarterKeys && current.quarterKeys.length ? current.quarterKeys : ['P1','P3','P4','P5'];
+  // Build updates array: try to use header names matching keys (admin must ensure sheet has same column names)
+  const updates = [];
+  const checkboxes = document.querySelectorAll('#timelineWrap input[type=checkbox]');
+  checkboxes.forEach(cb=>{
+    const key = cb.dataset.key;
+    // columnName must match the exact header in the sheet. For safety we assume your sheet has columns named exactly like key (e.g., "Y1Q1"). Adjust if needed.
+    updates.push({ columnName: key, value: cb.checked ? 'TRUE' : '' });
+  });
+
+  const payload = { matric, updates, _svpass: document.getElementById('svpass').value || '' };
+  const res = await fetch('/api/update_timeline', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  const j = await res.json();
+  alert(JSON.stringify(j));
+}
+</script>
+</body>
+</html>
