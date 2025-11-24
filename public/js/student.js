@@ -1,37 +1,42 @@
-const API_BASE = "https://amdistudentprogress.onrender.com";
+// public/js/student.js
+// Simple status checker: redirect to /student/:matric
+// Usage: <input id="matric"> <button onclick="checkStatus()">Check</button>
 
-async function checkStatus() {
-  const matric = document.getElementById("matric").value.trim();
+function checkStatus() {
+  const matricInput = document.getElementById("matric");
   const result = document.getElementById("result");
 
-  if (!matric) {
-    result.innerHTML = "<span style='color:red;'>Please enter a matric number.</span>";
+  if (!matricInput) {
+    console.error("Element #matric not found in DOM.");
     return;
   }
 
-  result.innerHTML = "Checking...";
+  const matric = matricInput.value.trim();
 
-  try {
-    const res = await fetch(`${API_BASE}/api/status?matric=${matric}`);
-    const data = await res.json();
-
-    if (!data || !data.matric) {
-      result.innerHTML = "<span style='color:red;'>Student not found.</span>";
-      return;
+  if (!matric) {
+    if (result) {
+      result.innerHTML = "<span style='color:red;'>Please enter a matric number.</span>";
+    } else {
+      alert("Please enter a matric number.");
     }
-
-    result.innerHTML = `
-      <div class="card">
-        <h3>${data.studentName} (${data.matric})</h3>
-        <p><strong>P1:</strong> ${data.P1 || "Not Submitted"}</p>
-        <p><strong>P3:</strong> ${data.P3 || "Not Submitted"}</p>
-        <p><strong>P4:</strong> ${data.P4 || "Not Submitted"}</p>
-        <p><strong>P5:</strong> ${data.P5 || "Not Submitted"}</p>
-        <p><strong>Overall:</strong> ${data.overall || "Not Started"}</p>
-      </div>
-    `;
-
-  } catch (e) {
-    result.innerHTML = "<span style='color:red;'>Error connecting to server.</span>";
+    return;
   }
+
+  // Clear any message and redirect to the student page
+  if (result) result.innerHTML = "Opening student progress page...";
+  // Use encodeURIComponent to keep URL safe
+  window.location.href = `/student/${encodeURIComponent(matric)}`;
 }
+
+// Optional: allow Enter key in the input to trigger checkStatus
+document.addEventListener("DOMContentLoaded", () => {
+  const input = document.getElementById("matric");
+  if (input) {
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        checkStatus();
+      }
+    });
+  }
+});
