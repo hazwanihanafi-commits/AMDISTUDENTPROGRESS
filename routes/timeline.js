@@ -1,201 +1,296 @@
-// routes/timeline.js (ESM)
+// routes/timeline.js
+// ESM module for timeline API: GET /api/timeline and POST /api/update_timeline
 import express from 'express';
-import { readRange, writeRange } from '../services/googleSheets.js';
+import { google } from 'googleapis';
+import xlsx from 'xlsx';
+import fs from 'fs';
+import path from 'path';
 
 const router = express.Router();
-const SHEET_ID = process.env.SHEET_ID;
-const SV_PASS = process.env.SUPERVISOR_PASS || '';
 
-/**
- * Helper: find header index by exact or fuzzy match
- */
-function findHeaderIndex(header, names) {
-  for (const name of names) {
-    const idx = header.findIndex(h => String(h||'').trim().toLowerCase() === String(name||'').trim().toLowerCase());
-    if (idx !== -1) return idx;
+// Config: try these tab names in order
+const TAB_CANDIDATES = ['MasterTracking', 'Form responses', 'Form responses 1', 'Sheet1'];
+
+// Try these start date column names
+const START_DATE_KEYS = ['Start Date','StartDate','Start','Registration Date','Timestamp'];
+
+// Default activity list fallback (if templates/mapping missing)
+const DEFAULT_ACTIVITIES = [
+  'Registration & Orientation','Literature Review & Proposal Preparation','Proposal Defence',
+  'Research Ethics Approval (JEPeM)','Research Implementation I','Mid-Candidature Review',
+  'Research Communication I','Research Implementation II','Publication I','Research Dissemination',
+  'Thesis Preparation','Pre-Submission Review (JPMPMP)','Thesis Examination & Completion'
+];
+
+// Helper to get auth'd Google Sheets client
+async function getSheetsClientFromEnv() {
+  if (!process.env.SERVICE_ACCOUNT_JSON) throw new Error('SERVICE_ACCOUNT_JSON env missing');
+  const creds = typeof process.env.SERVICE_ACCOUNT_JSON === 'string'
+    ? JSON.parse(process.env.SERVICE_ACCOUNT_JSON)
+    : process.env.SERVICE_ACCOUNT_JSON;
+  const jwt = new google.auth.JWT(
+    creds.client_email, null, creds.private_key,
+    ['https://www.googleapis.com/auth/spreadsheets']
+  );
+  await jwt.authorize();
+  return google.sheets({ version: 'v4', auth: jwt });
+}
+
+// Helper: find which tab exists
+async function findExistingTab(sheets, spreadsheetId) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const names = (meta.data.sheets || []).map(s => s.properties.title);
+  for (const t of TAB_CANDIDATES) if (names.includes(t)) return t;
+  // fallback to first sheet
+  return names[0];
+}
+
+// Helper: read whole sheet (A1:Z2000)
+async function readSheetRows(sheets, spreadsheetId, tabName) {
+  const range = `${tabName}!A1:Z2000`;
+  const resp = await sheets.spreadsheets.values.get({ spreadsheetId, range });
+  return resp.data.values || [];
+}
+
+// Helper: write single cell (A1 notation)
+async function writeCell(sheets, spreadsheetId, tabName, a1Range, value) {
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${tabName}!${a1Range}`,
+    valueInputOption: 'RAW',
+    resource: { values: [[value]] }
+  });
+}
+
+// Convert column index (0-based) to letter (A,B,...,Z,AA,...)
+function colToLetter(col) {
+  let s = '';
+  while (col >= 0) {
+    s = String.fromCharCode((col % 26) + 65) + s;
+    col = Math.floor(col / 26) - 1;
   }
-  // fuzzy: contains
-  for (let i=0;i<header.length;i++){
-    const h = String(header[i]||'').toLowerCase();
-    for (const name of names) if (name && h.includes(String(name).toLowerCase())) return i;
+  return s;
+}
+
+// compute quarter ranges from startDate (Date object)
+// returns array of { key: 'Y1Q1', start: ISO, end: ISO }
+function computeQuartersFromStart(startDate, years = 3) {
+  // quarters are 3-month periods; we'll treat Q1 as startDate .. startDate+3mo
+  const quarters = [];
+  let cursor = new Date(startDate);
+  for (let y = 1; y <= years; y++) {
+    for (let q = 1; q <= 4; q++) {
+      const start = new Date(cursor);
+      const end = new Date(start);
+      end.setMonth(end.getMonth() + 3);
+      const key = `Y${y}Q${q}`;
+      quarters.push({ key, start: start.toISOString(), end: end.toISOString() });
+      // advance cursor to end
+      cursor = new Date(end);
+    }
   }
-  return -1;
+  return quarters;
+}
+
+// try to parse a date from various formats
+function parseDateFlexible(s) {
+  if (!s) return null;
+  if (s instanceof Date) return s;
+  // if already ISO-like
+  const iso = new Date(s);
+  if (!Number.isNaN(iso.getTime())) return iso;
+  // try dd/mm/yyyy or dd-mm-yyyy
+  const m = String(s).trim().match(/^(\d{1,2})[\/\-\s](\d{1,2})[\/\-\s](\d{2,4})$/);
+  if (m) {
+    const dd = parseInt(m[1],10), mm = parseInt(m[2],10)-1, yy = parseInt(m[3],10);
+    return new Date(yy < 100 ? 2000 + yy : yy, mm, dd);
+  }
+  return null;
+}
+
+// try to extract activities from template mapping file in /tmp if present
+function loadActivitiesFromMapping(type) {
+  try {
+    const p = type === 'phd'
+      ? '/tmp/timeline_mapping_phd.json'
+      : '/tmp/timeline_mapping_msc.json';
+    if (fs.existsSync(p)) {
+      const js = JSON.parse(fs.readFileSync(p, 'utf8'));
+      if (js.mapping && js.mapping.length) return js.mapping.map(m => m.activity);
+      if (js.activities && js.activities.length) return js.activities;
+    }
+  } catch (e) {
+    console.warn('mapping load fail', e && e.toString());
+  }
+  return DEFAULT_ACTIVITIES;
 }
 
 /**
- * GET /api/timeline?matric=...&template=m|p
- * returns:
- * { status:'ok', template:'m', matric:'...', studentName:'', lastUpdate:'', activities: [ { activity, stage, stageValue, quarterTicks: {Y1Q1: true,...} } ], milestones: {P1:'',P3:'',P4:'',P5:''} }
+ * GET /api/timeline?matric=...&template=(m|p)
+ * Returns student row + dynamic quarterRanges + activities + values for each quarter key
  */
 router.get('/timeline', async (req, res) => {
   try {
-    const matric = String(req.query.matric || '').trim();
+    const matric = (req.query.matric || '').toString().trim();
+    const tmpl = ((req.query.template || 'm').toString().toLowerCase() === 'p') ? 'phd' : 'msc';
     if (!matric) return res.status(400).json({ status:'error', message:'missing matric' });
 
-    // read sheet
-    const rows = await readRange(SHEET_ID, 'MasterTracking!A1:Z10000');
-    const header = rows[0] || [];
-    const data = rows.slice(1);
+    const sheets = await getSheetsClientFromEnv();
+    const spreadsheetId = process.env.SHEET_ID;
+    if (!spreadsheetId) return res.status(500).json({ status:'error', message:'SHEET_ID missing' });
 
-    const matIdx = findHeaderIndex(header, ['Matric','matric','Matric No','MatricNo']);
-    const nameIdx = findHeaderIndex(header, ['StudentName','Student Name','Name']);
-    const lastIdx = findHeaderIndex(header, ['Last Update','LastUpdate','Timestamp']);
+    const tab = await findExistingTab(sheets, spreadsheetId);
+    const rows = await readSheetRows(sheets, spreadsheetId, tab);
+    if (!rows.length) return res.status(500).json({ status:'error', message:'sheet empty' });
 
-    const row = data.find(r => String((r[matIdx]||'')).trim() === String(matric).trim());
-    if (!row) return res.json({ status:'not_found' });
+    const headers = rows[0].map(h => (h||'').toString().trim());
+    // find matric column
+    const matricCols = ['Matric','Matric No','MatricNo','StudentID','ID'];
+    let mIdx = headers.findIndex(h => matricCols.includes(h));
+    if (mIdx === -1) {
+      // fallback to first col named Matric-like
+      mIdx = headers.findIndex(h => /matric/i.test(h));
+    }
+    if (mIdx === -1) return res.status(500).json({ status:'error', message:'matric column not found' });
 
-    // build base milestones
-    const milestones = {
-      P1: row[findHeaderIndex(header, ['P1 Submitted','P1'])] || '',
-      P1Approved: row[findHeaderIndex(header, ['P1 Approved','P1Approved'])] || '',
-      P3: row[findHeaderIndex(header, ['P3 Submitted','P3'])] || '',
-      P3Approved: row[findHeaderIndex(header, ['P3 Approved','P3Approved'])] || '',
-      P4: row[findHeaderIndex(header, ['P4 Submitted','P4'])] || '',
-      P4Approved: row[findHeaderIndex(header, ['P4 Approved','P4Approved'])] || '',
-      P5: row[findHeaderIndex(header, ['P5 Submitted','P5'])] || '',
-      P5Approved: row[findHeaderIndex(header, ['P5 Approved','P5Approved'])] || ''
-    };
-
-    // choose template mapping (m = MSc, p = PhD)
-    const template = (req.query.template || 'm').toLowerCase() === 'p' ? 'phd' : 'msc';
-
-    // default activities order (will be replaced by migration-driven mapping if present in sheet)
-    const activities = [
-      "Registration & Orientation",
-      "Literature Review & Proposal Preparation",
-      "Proposal Defence",
-      "Research Ethics Approval (JEPeM)",
-      "Research Implementation I",
-      "Mid-Candidature Review",
-      "Research Communication I",
-      "Research Implementation II",
-      "Publication I",
-      "Research Dissemination",
-      "Thesis Preparation",
-      "Pre-Submission Review (JPMPMP)",
-      "Thesis Examination & Completion"
-    ];
-
-    // mapping stage per activity (P1,P3,P4,P5)
-    const ACT_TO_STAGE = {
-      "Registration & Orientation":"P1",
-      "Literature Review & Proposal Preparation":"P1",
-      "Proposal Defence":"P1",
-      "Research Ethics Approval (JEPeM)":"P1",
-      "Research Implementation I":"P3",
-      "Mid-Candidature Review":"P3",
-      "Research Communication I":"P3",
-      "Research Implementation II":"P4",
-      "Publication I":"P4",
-      "Research Dissemination":"P4",
-      "Thesis Preparation":"P4",
-      "Pre-Submission Review (JPMPMP)":"P5",
-      "Thesis Examination & Completion":"P5"
-    };
-
-    // Attempt to detect quarter columns for each activity by scanning header names (e.g., "Year 1 Q1" or activity + "Q1")
-    // Build quarterTicks for each activity using any header columns that match pattern
-    const quarterKeys = []; // e.g., ['Y1Q1','Y1Q2',...]
-    // Try to build quarter list from header by searching for "Q1", "Q2", "Q3", "Q4" substrings
-    for (const h of header) {
-      const hh = String(h||'');
-      if (hh.match(/q[1-4]/i) || hh.match(/year\s*\d/i)) {
-        // try standardize to Y#Q#
-        const qmatch = hh.match(/(y(?:ear)?\s*([0-9]))?.*(q[1-4])/i);
-        if (qmatch) {
-          const y = qmatch[2] || '1';
-          const q = qmatch[3].toUpperCase();
-          const key = `Y${y}${q.toUpperCase()}`;
-          if (!quarterKeys.includes(key)) quarterKeys.push(key);
-        } else {
-          // fallback: if contains Q1..Q4
-          const q = hh.match(/(q[1-4])/i);
-          if (q) {
-            const key = `Q_${q[1].toUpperCase()}`; if (!quarterKeys.includes(key)) quarterKeys.push(key);
-          }
-        }
+    // find student row
+    let rowObj = null;
+    let rowNumber = -1;
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      if ((r[mIdx] || '').toString().trim() === matric.toString()) {
+        rowNumber = i+1; // 1-based sheet rows
+        // build object
+        rowObj = {};
+        headers.forEach((h, ci) => (rowObj[h] = r[ci] || ''));
+        break;
       }
     }
+    if (!rowObj) return res.status(404).json({ status:'error', message:'student not found' });
 
-    // build activity objects; if no quarterKeys found, quarterTicks will be empty and UI will use stage flags (P1/P3/P4/P5)
-    const resultActivities = activities.map(act=>{
-      const stage = ACT_TO_STAGE[act] || '';
-      // stage value pulled from milestones
-      const stageVal = milestones[stage] || '';
-      // build quarterTicks by looking for header columns that contain activity words + Q1/Q2...
-      const quarterTicks = {};
-      for (const h of header) {
-        const hLower = String(h||'').toLowerCase();
-        if (hLower.includes(act.split(' ')[0].toLowerCase()) || hLower.includes(act.split(' ')[1]?.toLowerCase() || '')) {
-          // if header also contains q1/q2 etc, map it
-          const q = hLower.match(/q[1-4]/i);
-          const y = hLower.match(/y(?:ear)?\s*([0-9])/i);
-          if (q) {
-            const key = `Y${y ? y[1] : 1}${q[0].toUpperCase()}`;
-            const idx = header.indexOf(h);
-            quarterTicks[key] = Boolean(row[idx] && String(row[idx]).trim() !== '');
-          }
-        }
-      }
-      return { activity:act, stage, stageValue: stageVal, quarterTicks };
+    // find start date
+    let startDateVal = null;
+    let startColIndex = -1;
+    for (const k of START_DATE_KEYS) {
+      const idx = headers.findIndex(h => (h||'').toString().trim() === k);
+      if (idx !== -1) { startColIndex = idx; startDateVal = rows[rowNumber-1][idx]; break; }
+    }
+    // fallback search by fuzzy header contains "start"
+    if (!startDateVal) {
+      const idx2 = headers.findIndex(h => /start/i.test(h));
+      if (idx2 !== -1) { startColIndex = idx2; startDateVal = rows[rowNumber-1][idx2]; }
+    }
+
+    const parsedStart = parseDateFlexible(startDateVal) || new Date();
+
+    // compute quarterRanges
+    const quarterRanges = computeQuartersFromStart(parsedStart, 3); // 3 years
+
+    // Quarter keys to check in sheet headers (we expect Y1Q1..Y3Q4 columns to exist)
+    const quarterKeys = quarterRanges.map(q=> q.key);
+
+    // load activities (from mapping file if present)
+    const activities = loadActivitiesFromMapping(tmpl);
+
+    // Read current values for quarter columns if these columns exist
+    const values = {}; // { 'Y1Q1': '✓' or '' ... }
+    quarterKeys.forEach(k => {
+      const idx = headers.findIndex(h => (h||'').toString().trim() === k);
+      values[k] = idx !== -1 ? (rows[rowNumber-1][idx] || '') : '';
     });
 
-    res.json({
+    // Build activity objects: for now we return activities + quarterTicks derived from sheet values
+    const activityObjs = activities.map(act => {
+      const quarterTicks = {};
+      quarterKeys.forEach(k => { quarterTicks[k] = !!values[k]; });
+      return { activity: act, quarterTicks, stageValue: '' }; // stageValue can be set from P1..P5 columns if needed
+    });
+
+    // Collect milestones P1..P5 values if available
+    const milestones = {};
+    ['P1','P3','P4','P5'].forEach(s => {
+      const possible = [`${s} Submitted`, `${s}Submitted`, `${s}_Submitted`, `${s} Approved`, `${s}Approved`];
+      for (const p of possible) {
+        const idx = headers.findIndex(h => (h||'').toString().trim() === p);
+        if (idx !== -1) { milestones[s] = rows[rowNumber-1][idx] || ''; break; }
+      }
+      if (!milestones[s]) milestones[s] = '';
+    });
+
+    return res.json({
       status: 'ok',
-      template,
       matric,
-      studentName: row[nameIdx] || '',
-      lastUpdate: row[lastIdx] || '',
+      studentName: rowObj['Student Name'] || rowObj['StudentName'] || rowObj['Name'] || '',
+      lastUpdate: rowObj['Last Update'] || rowObj['Timestamp'] || '',
+      startDate: parsedStart.toISOString(),
+      quarterRanges,
+      quarterKeys,
+      activities: activityObjs,
       milestones,
-      activities: resultActivities,
-      quarterKeys
+      header: headers,
+      rawRow: rowObj
     });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ status:'error', message: err.toString() });
+    console.error('timeline err', err);
+    return res.status(500).json({ status:'error', message: err && err.toString ? err.toString() : String(err) });
   }
 });
 
 /**
  * POST /api/update_timeline
- * body: { matric, updates: [ { columnName, value } ], _svpass }
- * Protected by supervisor pass (if set)
+ * body { matric, column: 'Y1Q1', value: '✓' or '' }
+ * writes the value into the cell for that student under the column. If the column does not exist, it appends it.
  */
 router.post('/update_timeline', async (req, res) => {
   try {
-    const pass = req.body._svpass || '';
-    if (SV_PASS && pass !== SV_PASS) return res.status(403).json({ status:'error', message:'not authorized' });
+    const { matric, column, value } = req.body || {};
+    if (!matric || !column) return res.status(400).json({ status:'error', message:'missing params' });
 
-    const matric = req.body.matric;
-    const updates = req.body.updates || [];
-    if (!matric || !Array.isArray(updates)) return res.status(400).json({ status:'error', message:'missing params' });
+    const sheets = await getSheetsClientFromEnv();
+    const spreadsheetId = process.env.SHEET_ID;
+    if (!spreadsheetId) return res.status(500).json({ status:'error', message:'SHEET_ID missing' });
 
-    const rows = await readRange(SHEET_ID, 'MasterTracking!A1:Z10000');
-    const header = rows[0] || [];
-    const data = rows.slice(1);
-    const matIdx = header.findIndex(h => String(h||'').toLowerCase().includes('matric'));
-    const rowIdx = data.findIndex(r => String(r[matIdx]||'') === String(matric));
-    if (rowIdx === -1) return res.status(404).json({ status:'error', message:'student not found' });
+    const tab = await findExistingTab(sheets, spreadsheetId);
+    const rows = await readSheetRows(sheets, spreadsheetId, tab);
+    if (!rows.length) return res.status(500).json({ status:'error', message:'sheet empty' });
 
-    const sheetRowNumber = rowIdx + 2;
-
-    // For each update, find header index and write
-    for (const u of updates) {
-      const colIndex = header.findIndex(h => String(h||'').trim().toLowerCase() === String(u.columnName||'').trim().toLowerCase());
-      if (colIndex === -1) {
-        console.warn('Column not found:', u.columnName);
-        continue;
-      }
-      const a1col = String.fromCharCode('A'.charCodeAt(0) + colIndex);
-      const range = `MasterTracking!${a1col}${sheetRowNumber}`;
-      await writeRange(SHEET_ID, range, [[u.value]]);
+    const headers = rows[0].map(h => (h||'').toString().trim());
+    let colIndex = headers.findIndex(h => h === column);
+    // If column doesn't exist, append it to end
+    if (colIndex === -1) {
+      headers.push(column);
+      // update header row (A1)
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${tab}!A1`,
+        valueInputOption: 'RAW',
+        resource: { values: [headers] }
+      });
+      colIndex = headers.length - 1;
     }
 
-    res.json({ status:'ok', message:'updated' });
+    // find matric column & row index
+    const matricCols = ['Matric','Matric No','MatricNo','StudentID','ID'];
+    let mIdx = headers.findIndex(h => matricCols.includes(h));
+    if (mIdx === -1) mIdx = headers.findIndex(h => /matric/i.test(h));
+    if (mIdx === -1) return res.status(500).json({ status:'error', message:'matric column not found' });
+
+    let rowNumber = -1;
+    for (let i = 1; i < rows.length; i++) {
+      if ((rows[i][mIdx] || '').toString().trim() === matric.toString()) { rowNumber = i+1; break; }
+    }
+    if (rowNumber === -1) return res.status(404).json({ status:'error', message:'student not found' });
+
+    const colLetter = colToLetter(colIndex);
+    // write value into the cell
+    await writeCell(sheets, spreadsheetId, tab, `${colLetter}${rowNumber}`, value || '');
+
+    return res.json({ status:'ok', matric, column, value });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ status:'error', message: err.toString() });
+    console.error('update_timeline err', err);
+    return res.status(500).json({ status:'error', message: err && err.toString ? err.toString() : String(err) });
   }
 });
 
