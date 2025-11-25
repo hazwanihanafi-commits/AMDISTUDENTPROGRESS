@@ -1,16 +1,24 @@
-import express from 'express';
+import express from "express";
+import dotenv from "dotenv";
+dotenv.config();
+
 const router = express.Router();
 
-router.get('/login', (req, res) => {
-  res.sendFile('login.html', { root: './public' });
+router.get("/login", (req, res) => {
+  res.render("login");
 });
 
-router.post('/login', (req, res) => {
-  const { username, password } = req.body;
-  if (username === 'admin' && password === 'admin123') {
-    return res.redirect('/admin');
+router.post("/login", (req, res) => {
+  const { email, password } = req.body;
+
+  if (
+    email === process.env.ADMIN_EMAIL &&
+    password === process.env.ADMIN_PASSWORD
+  ) {
+    return res.redirect("/admin");
   }
-  return res.status(401).send('Invalid credentials');
+
+  res.status(401).send("Invalid login");
 });
 
 export default router;
