@@ -2,31 +2,31 @@
 import express from "express";
 const router = express.Router();
 
-// Hard-coded temporary users
+// Temporary User Database
 const USERS = {
   "hazwanihanafi@usm.my": "password123",
   "admin@usm.my": "admin123"
 };
 
+// Login Page
 router.get("/login", (req, res) => {
   res.render("login");
 });
 
+// Login Process
 router.post("/login", (req, res) => {
   const { email, password } = req.body;
-
-  console.log("Login attempt:", email);
 
   if (!USERS[email] || USERS[email] !== password) {
     return res.status(401).send("Invalid login");
   }
 
-  // Save session
-  req.session.user = email;
+  req.session.user = email; // login success
 
-  res.redirect("/admin");
+  return res.redirect("/dashboard"); // GO TO DASHBOARD
 });
 
+// Logout
 router.get("/logout", (req, res) => {
   req.session.destroy(() => {
     res.redirect("/login");
