@@ -7,6 +7,12 @@ import indexRouter from "./routes/index.js";
 import apiRouter from "./routes/api.js";
 import studentRouter from "./routes/student.js";
 import adminRouter from "./routes/admin.js";
+import uploadRouter from "./routes/upload.js";
+
+// ... earlier setup ...
+app.use("/api", apiRouter);     // existing
+app.use("/api", uploadRouter);  // add this after apiRouter
+
 
 const app = express();
 
