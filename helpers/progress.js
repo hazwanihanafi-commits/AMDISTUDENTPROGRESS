@@ -1,7 +1,15 @@
-export function calcProgress(s) {
-// simple scoring: each approved = 1 point, submitted = 0.5; per milestone cap 1
-const pts = [
-(s.p1Submitted?0.5:0) + (s.p1Approved?1:0),
-(s.p3Submitted?0.5:0) + (s.p3Approved?1:0),
-(s.p4Submitted?0.5:0) + (s.p4Approved?1:0),
-(s.p5Submitted?0.5:0) + (s.p5Approv
+export function calcProgress(student) {
+  let level = "Not Started";
+  let percentage = 0;
+  const { p1Submitted, p3Submitted, p4Submitted, p5Submitted } = student;
+  if (p1Submitted && p3Submitted && p4Submitted && p5Submitted) {
+    level = 'P5'; percentage = 100;
+  } else if (p1Submitted && p3Submitted && p4Submitted) {
+    level = 'P4'; percentage = 75;
+  } else if (p1Submitted && p3Submitted) {
+    level = 'P3'; percentage = 50;
+  } else if (p1Submitted) {
+    level = 'P1'; percentage = 25;
+  }
+  return { level, percentage };
+}
