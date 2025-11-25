@@ -8,43 +8,34 @@ import studentRouter from "./routes/student.js";
 import authRouter from "./routes/auth.js";
 import dashboardRouter from "./routes/dashboard.js";
 
-const app = express();   // ✅ MUST COME FIRST
+const app = express();
 
-// =======================
-//  VIEW ENGINE
-// =======================
+// View engine
 app.set("views", "./views");
 app.set("view engine", "ejs");
 
-// =======================
-//  MIDDLEWARES
-// =======================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
-// ✅ Correct session initialization (only ONCE)
+// Session (ONLY ONCE)
 app.use(
   session({
     secret: "supersecretkey123",
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false } // Render uses HTTP
+    cookie: { secure: false }
   })
 );
 
-// =======================
-//  ROUTES ORDER
-// =======================
-app.use("/", authRouter);        // Login first
-app.use("/", indexRouter);
-app.use("/", dashboardRouter);   // Dashboard AFTER login check
-app.use("/api", apiRouter);
+// ROUTES – ORDER IS IMPORTANT
+app.use("/", authRouter);         // login routes
+app.use("/", indexRouter);        // homepage
+app.use("/dashboard", dashboardRouter); // protected pages
+app.use("/api", apiRouter);       // internal api
 app.use("/student", studentRouter);
 
-// =======================
-//  404 HANDLER
-// =======================
+// 404 fallback
 app.use((req, res) => {
   res.status(404).send("Page Not Found");
 });
