@@ -1,8 +1,12 @@
+// routes/auth.js
 import express from "express";
-import dotenv from "dotenv";
-dotenv.config();
-
 const router = express.Router();
+
+// Hard-coded temporary users
+const USERS = {
+  "hazwanihanafi@usm.my": "password123",
+  "admin@usm.my": "admin123"
+};
 
 router.get("/login", (req, res) => {
   res.render("login");
@@ -11,14 +15,22 @@ router.get("/login", (req, res) => {
 router.post("/login", (req, res) => {
   const { email, password } = req.body;
 
-  if (
-    email === process.env.ADMIN_EMAIL &&
-    password === process.env.ADMIN_PASSWORD
-  ) {
-    return res.redirect("/admin");
+  console.log("Login attempt:", email);
+
+  if (!USERS[email] || USERS[email] !== password) {
+    return res.status(401).send("Invalid login");
   }
 
-  res.status(401).send("Invalid login");
+  // Save session
+  req.session.user = email;
+
+  res.redirect("/admin");
+});
+
+router.get("/logout", (req, res) => {
+  req.session.destroy(() => {
+    res.redirect("/login");
+  });
 });
 
 export default router;
