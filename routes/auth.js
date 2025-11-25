@@ -23,7 +23,7 @@ router.post("/login", (req, res) => {
 
   req.session.user = email; // login success
 
-  return res.redirect("/dashboard"); // GO TO DASHBOARD
+  return res.redirect("/admin"); // GO TO DASHBOARD
 });
 
 // Logout
