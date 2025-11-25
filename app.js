@@ -5,6 +5,10 @@ import indexRouter from "./routes/index.js";
 import apiRouter from "./routes/api.js";
 import studentRouter from "./routes/student.js";
 import authRouter from "./routes/auth.js";
+import dashboardRouter from "./routes/dashboard.js";
+
+app.use("/", dashboardRouter);
+
 
 const app = express();
 
