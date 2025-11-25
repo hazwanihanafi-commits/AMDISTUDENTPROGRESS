@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Dashboard</title>
+  <script>
+    async function loadData() {
+      const res = await fetch("/api/all");
+      const data = await res.json();
+
+      document.getElementById("total").innerText = data.total;
+      document.getElementById("completed").innerText = data.completed;
+      document.getElementById("p1").innerText = data.stages.P1;
+      document.getElementById("p3").innerText = data.stages.P3;
+      document.getElementById("p4").innerText = data.stages.P4;
+      document.getElementById("p5").innerText = data.stages.P5;
+
+      document.getElementById("list").innerHTML = 
+        data.students.map(s => `<li>${s.matric} - ${s.name}</li>`).join("");
+    }
+
+    window.onload = loadData;
+  </script>
+</head>
+<body>
+  <h1>Welcome <%= email %></h1>
+  <a href="/logout">Logout</a>
+
+  <h2>Dashboard</h2>
+
+  <p>Total students: <b id="total"></b></p>
+  <p>Completed (P5): <b id="completed"></b></p>
+
+  <h3>Stages</h3>
+  <ul>
+    <li>P1: <b id="p1"></b></li>
+    <li>P3: <b id="p3"></b></li>
+    <li>P4: <b id="p4"></b></li>
+    <li>P5: <b id="p5"></b></li>
+  </ul>
+
+  <h3>Student List</h3>
+  <ul id="list"></ul>
+
+</body>
+</html>
