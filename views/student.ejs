@@ -1,58 +1,41 @@
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title><%= student.name %> — Progress</title>
-  <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
-  <link rel="stylesheet" href="/css/student.css">
-</head>
-<body>
-  <div class="container">
-    <h1><%= student.name %> (<%= student.matric %>)</h1>
-    <p>Programme: <%= student.programme %></p>
-    <p>Start Date: <%= (student.startDate instanceof Date) ? student.startDate.toDateString() : new Date(student.startDate).toDateString() %></p>
+<!-- Place near timeline or in student profile -->
+<div class="card" style="margin-top:12px;">
+  <h4>Submit research file</h4>
+  <form id="uploadForm">
+    <input type="file" id="fileInput" name="file" accept=".pdf,.doc,.docx,.zip,.png,.jpg" required />
+    <input type="hidden" id="matricInput" name="matric" value="<%= student.matric %>" />
+    <button type="submit" class="btn">Upload</button>
+    <div id="uploadStatus" style="margin-top:8px;"></div>
+  </form>
+</div>
 
-    <div id="donut" style="width:300px;height:200px"></div>
+<script>
+document.getElementById("uploadForm").addEventListener("submit", async function (e) {
+  e.preventDefault();
+  const fileEl = document.getElementById("fileInput");
+  if (!fileEl.files || !fileEl.files[0]) {
+    return alert("Please choose a file.");
+  }
+  const form = new FormData();
+  form.append("file", fileEl.files[0]);
+  form.append("matric", document.getElementById("matricInput").value);
 
-    <h3>Milestones</h3>
-    <table>
-      <thead><tr><th>Milestone</th><th>Expected</th><th>Submitted</th><th>Approved</th></tr></thead>
-      <tbody>
-        <% student.timeline.milestones.forEach(function(m){ %>
-          <tr>
-            <td><%= m.id %></td>
-            <td><%= m.expectedQuarter %></td>
-            <td><%= m.submitted ? '✓' : '' %></td>
-            <td><%= m.approved ? '✓' : '' %></td>
-          </tr>
-        <% }) %>
-      </tbody>
-    </table>
+  const statusEl = document.getElementById("uploadStatus");
+  statusEl.innerText = "Uploading...";
 
-    <div id="timeline" style="height:220px"></div>
-  </div>
-
-  <script>
-    const student = <%- JSON.stringify(student) %>;
-    const pct = student.progress.percentage || 0;
-
-    (function(){
-      const c = echarts.init(document.getElementById('donut'));
-      c.setOption({ title:{ text: pct+'%', left:'center'}, series:[{ type:'pie', radius:['60%','85%'], data:[{value:pct},{value:100-pct}] }] });
-    })();
-
-    (function(){
-      const chart = echarts.init(document.getElementById('timeline'));
-      const quarters = student.timeline.quarters;
-      const milestones = student.timeline.milestones;
-      const series = [];
-      milestones.forEach(m=>{
-        series.push({ name: m.id+' expected', type:'bar', stack:m.id, data: quarters.map(q=> q===m.expectedQuarter?1:0) });
-        series.push({ name: m.id+' submitted', type:'bar', stack:m.id, data: quarters.map(q=> (m.submitted && q===m.expectedQuarter)?1:0) });
-        series.push({ name: m.id+' approved', type:'bar', stack:m.id, data: quarters.map(q=> (m.approved && q===m.expectedQuarter)?1:0) });
-      });
-      chart.setOption({ xAxis:{ type:'category', data:quarters }, yAxis:{ show:false }, series });
-    })();
-  </script>
-</body>
-</html>
+  try {
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body: form
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      statusEl.innerHTML = `<span style="color:red;">Upload failed: ${data.error || JSON.stringify(data)}</span>`;
+      return;
+    }
+    statusEl.innerHTML = `Uploaded. <a href="${data.fileLink}" target="_blank">Open file</a>`;
+  } catch (err) {
+    statusEl.innerHTML = `<span style="color:red;">Upload error: ${err.message}</span>`;
+  }
+});
+</script>
