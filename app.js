@@ -2,40 +2,58 @@
 import express from "express";
 import session from "express-session";
 
+import authRouter from "./routes/auth.js";
 import indexRouter from "./routes/index.js";
 import apiRouter from "./routes/api.js";
 import studentRouter from "./routes/student.js";
-import authRouter from "./routes/auth.js";
-import dashboardRouter from "./routes/dashboard.js";
+import adminRouter from "./routes/admin.js";
 
 const app = express();
 
-// View engine
+// ----------------------------
+// View Engine
+// ----------------------------
 app.set("views", "./views");
 app.set("view engine", "ejs");
 
+// ----------------------------
+// Middlewares
+// ----------------------------
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static("public"));
 
-// Session (ONLY ONCE)
 app.use(
   session({
     secret: "supersecretkey123",
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false }
+    cookie: { secure: false }, // Render uses HTTP, not HTTPS
   })
 );
 
-// ROUTES – ORDER IS IMPORTANT
-app.use("/", authRouter);         // login routes
-app.use("/", indexRouter);        // homepage
-app.use("/dashboard", dashboardRouter); // protected pages
-app.use("/api", apiRouter);       // internal api
+// ----------------------------
+// ROUTES (VERY IMPORTANT ORDER)
+// ----------------------------
+
+// 1️⃣ Auth first (login, logout)
+app.use("/", authRouter);
+
+// 2️⃣ Admin dashboard (protected)
+app.use("/admin", adminRouter);
+
+// 3️⃣ API
+app.use("/api", apiRouter);
+
+// 4️⃣ Student pages
 app.use("/student", studentRouter);
 
-// 404 fallback
+// 5️⃣ Homepage
+app.use("/", indexRouter);
+
+// ----------------------------
+// 404
+// ----------------------------
 app.use((req, res) => {
   res.status(404).send("Page Not Found");
 });
