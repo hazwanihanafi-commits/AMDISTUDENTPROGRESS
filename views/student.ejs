@@ -1,9 +1,12 @@
-<!-- Place near timeline or in student profile -->
 <div class="card" style="margin-top:12px;">
-  <h4>Submit research file</h4>
+  <h4>Submit Research File</h4>
+
   <form id="uploadForm">
     <input type="file" id="fileInput" name="file" accept=".pdf,.doc,.docx,.zip,.png,.jpg" required />
-    <input type="hidden" id="matricInput" name="matric" value="<%= student.matric %>" />
+
+    <!-- Correct variable -->
+    <input type="hidden" id="matricInput" name="matric" value="<%= matric %>" />
+
     <button type="submit" class="btn">Upload</button>
     <div id="uploadStatus" style="margin-top:8px;"></div>
   </form>
@@ -12,13 +15,15 @@
 <script>
 document.getElementById("uploadForm").addEventListener("submit", async function (e) {
   e.preventDefault();
+
   const fileEl = document.getElementById("fileInput");
   if (!fileEl.files || !fileEl.files[0]) {
-    return alert("Please choose a file.");
+    return alert("Please choose a file to upload.");
   }
-  const form = new FormData();
-  form.append("file", fileEl.files[0]);
-  form.append("matric", document.getElementById("matricInput").value);
+
+  const formData = new FormData();
+  formData.append("file", fileEl.files[0]);
+  formData.append("matric", document.getElementById("matricInput").value);
 
   const statusEl = document.getElementById("uploadStatus");
   statusEl.innerText = "Uploading...";
@@ -26,16 +31,19 @@ document.getElementById("uploadForm").addEventListener("submit", async function 
   try {
     const res = await fetch("/api/upload", {
       method: "POST",
-      body: form
+      body: formData
     });
+
     const data = await res.json();
+
     if (!res.ok) {
-      statusEl.innerHTML = `<span style="color:red;">Upload failed: ${data.error || JSON.stringify(data)}</span>`;
+      statusEl.innerHTML = `<span style="color:red;">Upload failed: ${data.error}</span>`;
       return;
     }
-    statusEl.innerHTML = `Uploaded. <a href="${data.fileLink}" target="_blank">Open file</a>`;
+
+    statusEl.innerHTML = `Uploaded ✔ <a href="${data.fileLink}" target="_blank">Open file</a>`;
   } catch (err) {
-    statusEl.innerHTML = `<span style="color:red;">Upload error: ${err.message}</span>`;
+    statusEl.innerHTML = `<span style="color:red;">Error: ${err.message}</span>`;
   }
 });
 </script>
